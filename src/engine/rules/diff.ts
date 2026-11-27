@@ -16,11 +16,13 @@ const NATIVE: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯:
  * 실측: 원음 "12노트 … 2시 30분" / 완화음 "십이 노트 … 두 시 삼십 분" — 뜻은 같은데 10곳이 "다르게 들림"으로 표시됨
  */
 function numberNorm(words: string[]): string {
-  return norm(words.join(''))
+  const s = norm(words.join(''))
     .replace(/(열한|열두|다섯|여섯|일곱|여덟|아홉|한|두|세|네|열)(?=시|번)/gu, (w) => String(NATIVE[w]))
     .replace(/([공영일이삼사오육칠팔구십백]{1,5})(?=노트|분|번|시|마일|미터|도)/gu, (w) => sinoDigits(w) ?? w)
     .replace(/미터/gu, 'M') // "육십 미터" ↔ "60m" (norm 이 대문자로 바꿈)
     .replace(/킬로미터|킬로/gu, 'KM');
+  // 단위가 다음 단어로 떨어져 숫자만 남은 묶음 ("팔" ↔ "8", 화면 실측). 조사로도 쓰이는 "이" 한 글자는 제외
+  return /^[공영일이삼사오육칠팔구십백]{1,5}$/u.test(s) && s !== '이' ? (sinoDigits(s) ?? s) : s;
 }
 
 export function diffTranscripts(raw: string, enhanced: string): WordDiff[] {

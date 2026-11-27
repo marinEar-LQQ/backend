@@ -104,6 +104,9 @@ describe('시연 녹음(mono_noisy) 지원', () => {
     expect(
       diffTranscripts('깊이는 육십 미터쯤 되고 너는 왼쪽으로 백 미터 떨어져서 기다려라', '깊이는 60m쯤 되고 너는 왼쪽으로 100m 떨어져서 기다려라.').filter((x) => x.op !== 'same'),
     ).toEqual([]);
+    // 프론트 실측 3: 단위가 다음 단어라 숫자만 다른 묶음 ("팔" ↔ "8"). 진짜 다른 숫자("십이" ↔ "10")는 차이로 남는다
+    const d3 = diffTranscripts('속도를 팔 노트로 줄이고 속도는 십이 노트입니다', '속도를 8 노트로 줄이고 속도는 10 노트입니다').filter((x) => x.op !== 'same');
+    expect(d3.map((x) => [x.raw, x.enhanced])).toEqual([['십이', '10']]);
     // 실제로 다른 숫자는 그대로 차이
     expect(diffTranscripts('속도는 12노트입니다', '속도는 십 노트입니다').filter((x) => x.op !== 'same').length).toBeGreaterThan(0);
   });
