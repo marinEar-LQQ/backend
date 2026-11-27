@@ -22,6 +22,7 @@ import { Segmenter } from '../src/engine/audio/segmenter';
 import { extractCandidates } from '../src/engine/rules/extract';
 import { WhisperAsr, cleanTranscript } from '../src/engine/models/transformers-providers';
 import { geminiTranscribe } from '../src/online/gemini';
+import { cleanvoiceDenoise } from '../src/online/cleanvoice';
 
 type Variant = { name: string; run: (pcm: Float32Array) => Float32Array | Promise<Float32Array> };
 
@@ -118,12 +119,32 @@ async function main() {
     utts.push(...seg.flush());
     report.push(`\n## ${base} — 발화 ${utts.length}개: ${utts.map((u) => `${(u.startMs / 1000).toFixed(1)}–${(u.endMs / 1000).toFixed(1)}s`).join(', ')}`);
 
-    for (const v of VARIANTS) {
+    // cleanvoice: 파일 전체를 한 번 처리해 캐시하고, 같은 구간을 잘라 쓴다 (발화마다 호출하면 느리고 크레딧 소모)
+    let cleaned16: Float32Array | null = null;
+    if (pick.includes('cleanvoice')) {
+      const cache = path.join(outDir, `${base.replace('.wav', '')}-cleanvoice-full.wav`);
+      if (!fs.existsSync(cache)) {
+        const apiKey = process.env.CLEANVOICE_API_KEY ?? loadEnv().CLEANVOICE_API_KEY;
+        if (!apiKey) throw new Error('.env 에 CLEANVOICE_API_KEY 가 없습니다');
+        const t0 = performance.now();
+        fs.writeFileSync(cache, await cleanvoiceDenoise({ apiKey }, buf, base));
+        console.error(`${base} cleanvoice ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+      }
+      const cb = fs.readFileSync(cache);
+      const c = decodeWav(cb.buffer.slice(cb.byteOffset, cb.byteOffset + cb.byteLength));
+      cleaned16 = resample(c.pcm, c.sampleRate, 16000);
+    }
+    const variants = cleaned16 ? [...VARIANTS, { name: 'cleanvoice', run: (p: Float32Array) => p }] : VARIANTS;
+
+    for (const v of variants) {
       const texts: string[] = [];
       let ms = 0;
       let audioMs = 0;
       for (const [ui, u] of utts.entries()) {
-        const p16 = resample(u.pcm, u.sampleRate, 16000);
+        const p16 =
+          v.name === 'cleanvoice' && cleaned16
+            ? cleaned16.slice(Math.round((u.startMs / 1000) * 16000), Math.round((u.endMs / 1000) * 16000))
+            : resample(u.pcm, u.sampleRate, 16000);
         const audio = await v.run(p16);
         if (v.name !== 'raw') fs.writeFileSync(path.join(outDir, `${base.replace('.wav', '')}-${ui + 1}-${v.name}.wav`), Buffer.from(encodeWav(audio, 16000)));
         const t0 = performance.now();

@@ -27,8 +27,12 @@ export class GeminiError extends Error {
   }
 }
 
-export async function geminiGenerate(opts: GeminiOptions, parts: GeminiPart[], config: Record<string, unknown> = {}): Promise<string> {
-  const body = JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, ...config } });
+export async function geminiGenerate(opts: GeminiOptions, parts: GeminiPart[], config: Record<string, unknown> = {}, system?: string): Promise<string> {
+  const body = JSON.stringify({
+    ...(system ? { system_instruction: { parts: [{ text: system }] } } : {}),
+    contents: [{ role: 'user', parts }],
+    generationConfig: { temperature: 0, ...config },
+  });
   const retries = opts.retries ?? 3;
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${BASE}/${opts.model}:generateContent`, {
@@ -63,6 +67,15 @@ export function transcribePrompt(hints: string[]): string {
     .join('\n');
 }
 
+/** 모델이 받아쓰기 대신 지시문을 그대로 출력한 경우 (실측: Cleanvoice 처리음에서 간헐적으로 발생) */
+export function isPromptEcho(text: string): boolean {
+  return /받아 적으세요|VHF 무전 교신 녹음|들린 언어 그대로|추측해서 채우지/.test(text);
+}
+
 export async function geminiTranscribe(opts: GeminiOptions, wavBase64: string, hints: string[] = []): Promise<string> {
-  return geminiGenerate(opts, [{ inline_data: { mime_type: 'audio/wav', data: wavBase64 } }, { text: transcribePrompt(hints) }]);
+  // 지시문은 system_instruction 으로 분리해 오디오 내용과 섞이지 않게 한다
+  const run = () => geminiGenerate(opts, [{ inline_data: { mime_type: 'audio/wav', data: wavBase64 } }, { text: '위 음성을 받아 적으세요.' }], {}, transcribePrompt(hints));
+  let text = await run();
+  if (isPromptEcho(text)) text = await run();
+  return isPromptEcho(text) ? '' : text;
 }
