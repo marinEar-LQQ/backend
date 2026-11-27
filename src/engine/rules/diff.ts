@@ -1,4 +1,5 @@
 import type { WordDiff } from '../../contracts';
+import { sinoDigits } from './extract';
 
 /**
  * 원음/완화음 자막의 단어 단위 차이 (추가 기능 ②: 인식 차이 표시).
@@ -7,6 +8,18 @@ import type { WordDiff } from '../../contracts';
  */
 
 const norm = (w: string) => w.toUpperCase().replace(/[.,?!…·:;'"()[\]]/g, '');
+
+const NATIVE: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10, 열한: 11, 열두: 12 };
+
+/**
+ * 숫자 표기만 다른 묶음을 같은 것으로 보기 위한 정규화: 띄어쓰기를 없애고 단위 앞 한글 숫자를 아라비아 숫자로.
+ * 실측: 원음 "12노트 … 2시 30분" / 완화음 "십이 노트 … 두 시 삼십 분" — 뜻은 같은데 10곳이 "다르게 들림"으로 표시됨
+ */
+function numberNorm(words: string[]): string {
+  return norm(words.join(''))
+    .replace(/(열한|열두|다섯|여섯|일곱|여덟|아홉|한|두|세|네|열)(?=시|번)/gu, (w) => String(NATIVE[w]))
+    .replace(/([공영일이삼사오육칠팔구십]{1,4})(?=노트|분|번|시|마일|미터|도)/gu, (w) => sinoDigits(w) ?? w);
+}
 
 export function diffTranscripts(raw: string, enhanced: string): WordDiff[] {
   const a = raw.split(/\s+/).filter(Boolean);
@@ -23,6 +36,13 @@ export function diffTranscripts(raw: string, enhanced: string): WordDiff[] {
   const pendingRaw: string[] = [];
   const pendingEnh: string[] = [];
   const flush = () => {
+    // 숫자 표기만 다른 묶음("12노트" ↔ "십이 노트")은 한 단위의 'same' 으로
+    if (pendingRaw.length && pendingEnh.length && numberNorm(pendingRaw) === numberNorm(pendingEnh)) {
+      ops.push({ op: 'same', raw: pendingRaw.join(' '), enhanced: pendingEnh.join(' ') });
+      pendingRaw.length = 0;
+      pendingEnh.length = 0;
+      return;
+    }
     // 같은 자리에서 빠지고 들어온 단어들은 짝지어 'changed' 로
     const n = Math.max(pendingRaw.length, pendingEnh.length);
     for (let k = 0; k < n; k++) {

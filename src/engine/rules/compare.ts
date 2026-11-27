@@ -138,6 +138,15 @@ function singleOrNull(sources: ExtractionOutput[], field: EntityField): string |
   return null;
 }
 
+/**
+ * 속력처럼 한 교신에 바뀌는 값이 순서대로 나오는 필드: "12노트 … 8노트로 줄이고" → "12kn → 8kn".
+ * 모든 소스가 같은 순서로 들었을 때만 확정한다 (한쪽만 들은 값은 확정하지 않음 — singleOrNull 과 같은 원칙)
+ */
+function sequenceOrNull(sources: ExtractionOutput[], field: EntityField): string | null {
+  const perSource = sources.map((s) => finalValues(s, field).join(' → '));
+  return perSource.length > 0 && perSource[0] && uniq(perSource).length === 1 ? perSource[0] : null;
+}
+
 export function analyzeUtterance(input: AnalyzeInput): AnalyzeOutput {
   const { enhanced, raw, crossCheck, task, catalog } = input;
   const knownVessels = task ? [task.targetVessel, task.ownVessel] : [];
@@ -188,7 +197,7 @@ export function analyzeUtterance(input: AnalyzeInput): AnalyzeOutput {
     distance: singleOrNull(sources, 'distance'),
     identifier: singleOrNull(sources, 'identifier'),
     changeIntent: sources.some((s) => s.candidates.some((c) => c.field === 'changeIntent')) ? true : null,
-    speed: singleOrNull(sources, 'speed'),
+    speed: sequenceOrNull(sources, 'speed'),
     course: singleOrNull(sources, 'course'),
     // 지시어는 모든 소스(원음·완화음)에서 들린 것만 — 한쪽에서만 들린 지시는 확정처럼 번역하지 않는다
     instructions: (sources[0] ? finalValues(sources[0], 'instruction') : []).filter((code) =>

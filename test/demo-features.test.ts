@@ -96,6 +96,13 @@ describe('시연 녹음(mono_noisy) 지원', () => {
     ]);
     expect(d.filter((x) => x.op === 'same').map((x) => x.enhanced)).toEqual(['오늘', '많이', '라면이나', '먹어야겠다.']);
   });
+  it('숫자 표기만 다른 단어는 차이로 세지 않는다 (프론트 실측: 10곳 → 0곳)', () => {
+    const raw = '부산항 관제 여기는 한라호입니다. 신선대 부두 3번에 배를 댈 예정이고 속도는 12노트입니다. 속도를 8노트로 줄이고 도착은 오후 2시 30분쯤 예상합니다. 이상';
+    const enh = '부산항 관제. 여기는 한라호입니다. 신선대 부두 세 번에 배를 댈 예정이고, 속도는 십이 노트입니다. 속도를 팔 노트로 줄이고 도착은 오후 두 시 삼십 분쯤 예상합니다. 이상.';
+    expect(diffTranscripts(raw, enh).filter((x) => x.op !== 'same')).toEqual([]);
+    // 실제로 다른 숫자는 그대로 차이
+    expect(diffTranscripts('속도는 12노트입니다', '속도는 십 노트입니다').filter((x) => x.op !== 'same').length).toBeGreaterThan(0);
+  });
 });
 
 describe('독백 시연 대본 추출 (team3)', () => {
@@ -130,5 +137,10 @@ describe('독백 시연 대본 추출 (team3)', () => {
     const r = { ...o, enhancedTranscript: tr('x'), rawTranscript: tr('y'), crossCheck: 'complete' } as unknown as AnalysisResult;
     const speed = buildSummary(r, 'en')!.lines.filter((l) => l.field === 'speed');
     expect(speed).toEqual([{ field: 'speed', label: 'Speed', value: '[12 knots / 10 knots] (check)', uncertain: true }]);
+    expect(o.entities.speed).toBeNull();
+  });
+  it('속력 변화는 양쪽이 같은 순서로 들었으면 "12kn → 8kn" 로 확정 (표기가 달라도)', () => {
+    const o = analyzeUtterance({ enhanced: tr('속도는 십이 노트입니다. 속도를 팔 노트로 줄이고'), raw: tr('속도는 12노트입니다. 속도를 8노트로 줄이고'), crossCheck: 'complete', task: TASK_V1, catalog: DEMO_CATALOG });
+    expect(o.entities.speed).toBe('12kn → 8kn');
   });
 });
