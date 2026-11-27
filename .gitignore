@@ -4,3 +4,5 @@ dist/
 .env*
 /models/
 *.onnx
+
+fixtures/audio/*/out/
