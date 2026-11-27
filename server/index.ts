@@ -22,9 +22,14 @@ function loadEnv(): Record<string, string> {
 
 const env = { ...loadEnv(), ...process.env } as Record<string, string | undefined>;
 const PORT = Number(env.PORT ?? 8787);
-const ASR_MODEL = env.ASR_MODEL ?? 'gemini-3.5-flash-lite';
+// 받아쓰기: 정확한 flash 를 먼저, 제한 시간 안에 답이 없거나 실패하면 빠른 flash-lite 로.
+// 실측(2026-11-27, 새 녹음 3개, 선박명 힌트): 핵심어 flash 23/23 / lite 21/23, 22초 녹음 처리 flash 9~46s / lite 2s
+const ASR_MODEL = env.ASR_MODEL ?? 'gemini-3.5-flash';
+const ASR_FALLBACK_MODEL = env.ASR_FALLBACK_MODEL ?? 'gemini-3.5-flash-lite';
+const ASR_TIMEOUT_MS = Number(env.ASR_TIMEOUT_MS ?? 20000);
 const MT_MODEL = env.MT_MODEL ?? 'nvidia/nemotron-3-ultra-550b-a55b';
-const MAX_BODY = 12 * 1024 * 1024; // 28초 16kHz WAV base64 ≈ 1.2MB. 여유 있게 12MB
+const deadKeys = new Set<string>();
+const MAX_BODY =12 * 1024 * 1024; // 28초 16kHz WAV base64 ≈ 1.2MB. 여유 있게 12MB
 
 /** 로컬 개발 주소만 허용 (시연용). 배포 시 프론트 주소를 ALLOWED_ORIGINS 에 추가 */
 const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -64,16 +69,31 @@ const server = http.createServer(async (req, res) => {
   const started = Date.now();
   try {
     if (req.method === 'GET' && path === '/api/health') {
-      return send(res, 200, { asr: !!env.GEMINI_API_KEY, translate: !!env.NVIDIA_API_KEY, models: { asr: ASR_MODEL, translate: MT_MODEL } }, origin);
+      return send(res, 200, { asr: !!env.GEMINI_API_KEY, translate: !!env.NVIDIA_API_KEY, models: { asr: ASR_MODEL, asrFallback: ASR_FALLBACK_MODEL, translate: MT_MODEL } }, origin);
     }
     if (req.method === 'POST' && path === '/api/transcribe') {
       if (!env.GEMINI_API_KEY) return send(res, 503, { error: 'GEMINI_API_KEY 가 설정되지 않았습니다' }, origin);
       const body = await readJson(req);
       if (typeof body.wavBase64 !== 'string' || !body.wavBase64) return send(res, 400, { error: 'wavBase64 필요' }, origin);
       const hints = Array.isArray(body.hints) ? body.hints.filter((h): h is string => typeof h === 'string').slice(0, 50) : [];
-      const text = await geminiTranscribe({ apiKey: env.GEMINI_API_KEY, model: ASR_MODEL }, body.wavBase64, hints);
-      console.log(`transcribe ${Date.now() - started}ms`);
-      return send(res, 200, { text, model: ASR_MODEL }, origin);
+      // 시도 순서: 정확한 모델 × (주 키 → 예비 키) → 빠른 모델 × (주 키 → 예비 키)
+      // 무료 등급 한도(429)·과부하·시간 초과에 대비 (실측: 하루 평가 반복으로 flash 한도 소진)
+      // "API key not valid" 로 거절된 키는 서버가 떠 있는 동안 다시 쓰지 않는다 (매 요청 헛시도 방지)
+      const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter((k): k is string => !!k && !deadKeys.has(k));
+      const attempts = [ASR_MODEL, ASR_FALLBACK_MODEL].flatMap((model) => keys.map((apiKey, ki) => ({ model, apiKey, ki })));
+      let lastErr: unknown = null;
+      for (const a of attempts) {
+        try {
+          const text = await geminiTranscribe({ apiKey: a.apiKey, model: a.model, timeoutMs: a.model === ASR_MODEL ? ASR_TIMEOUT_MS : 30000, retries: 0 }, body.wavBase64, hints);
+          console.log(`transcribe(${a.model}, 키${a.ki + 1}) ${Date.now() - started}ms`);
+          return send(res, 200, { text, model: a.model }, origin);
+        } catch (e) {
+          lastErr = e;
+          if (/API key not valid/i.test((e as Error).message)) deadKeys.add(a.apiKey);
+          console.warn(`${a.model} 키${a.ki + 1} 실패 → 다음 시도: ${(e as Error).message.slice(0, 100)}`);
+        }
+      }
+      throw lastErr ?? new Error('받아쓰기 실패');
     }
     if (req.method === 'POST' && path === '/api/translate') {
       if (!env.NVIDIA_API_KEY) return send(res, 503, { error: 'NVIDIA_API_KEY 가 설정되지 않았습니다' }, origin);

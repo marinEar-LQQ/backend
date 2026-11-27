@@ -27,6 +27,16 @@ function uncertainDisplay(result: AnalysisResult, c: EntityCandidate): string | 
   // 한 문장에 서로 다른 장소가 각각 언급된 경우("HJNC 앞 해역 … PNC 3번 선석")는 들린 그대로 둔다.
   // [A / B] 는 같은 자리의 값이 엇갈릴 때(원음/완화음 불일치, 정정 불명확)만 쓴다.
   if (u.reason === 'MULTIPLE_CANDIDATES') return null;
+  if (field === 'vessel') {
+    // 선박은 한 문장에 여러 척이 나온다. 이 이름이 다른 쪽 인식에도 들렸으면 확실한 것으로 보고,
+    // 한쪽에만 들린 이름만 [이 이름 / 다른 쪽에만 들린 이름] 으로 표시한다 ("제7해진호" vs "칠레진호")
+    const other = c.source === 'enhanced' ? 'raw' : 'enhanced';
+    const otherNames = result.candidates.filter((x) => x.field === 'vessel' && x.source === other).map((x) => x.value);
+    if (otherNames.length === 0 || otherNames.includes(c.value)) return null;
+    const mine = result.candidates.filter((x) => x.field === 'vessel' && x.source === c.source).map((x) => x.value);
+    const onlyOther = otherNames.filter((n) => !mine.includes(n));
+    return onlyOther.length ? `[${[c.value, ...onlyOther].join(' / ')}]` : `[${c.value}?]`;
+  }
   return u.alternatives.length === 1 ? `[${u.alternatives[0]}?]` : `[${u.alternatives.join(' / ')}]`;
 }
 
@@ -48,7 +58,7 @@ export function buildProtectedSource(result: AnalysisResult): ProtectedSource {
     const before = text.slice(cursor, c.span.start);
     const uncertain = uncertainDisplay(result, c);
     // 시간·거리·번호는 번역문에서 언어와 무관하게 읽히도록 정규화 값(14:30, 1.5NM)으로 복원
-    const normalized = c.field === 'time' || c.field === 'distance' || c.field === 'identifier' || c.field === 'berth' ? c.value : c.surface;
+    const normalized = c.field === 'time' || c.field === 'distance' || c.field === 'identifier' || c.field === 'berth' ? c.value.replace(/^(d+(?:.d+)?)mile$/, '$1 mi') : c.surface;
     const value = uncertain ?? normalized;
     const ph = placeholder(tokens.length);
     tokens.push({ placeholder: ph, value, field: uncertain ? 'uncertain' : c.field });

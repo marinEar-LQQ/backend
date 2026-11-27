@@ -9,6 +9,8 @@ export interface AsrContext {
   variant: AudioVariant;
   /** 세그먼트 시간을 세션 기준으로 바꾸기 위한 발화 시작 시각 */
   utteranceStartMs: number;
+  /** 받아쓰기 힌트: 발화 시점 작업 기준의 선박 이름 등. 들린 경우에만 쓰도록 지시한다 (지원하는 ASR 만 사용) */
+  vocabulary?: string[];
   /** 파일 분석이면 파일명 (시연 고정 데이터가 파일별 대본을 고를 때 사용) */
   sessionFile?: string;
 }

@@ -3,7 +3,7 @@ export { EngineCore, stateOf, type EngineCoreDeps } from './engine/core';
 export { MockEngineClient, type MockEngineOptions } from './engine/mock-client';
 export { analyzeFile, analyzePcm, decodeAudioFile, streamPcm } from './engine/file-input';
 export { DEMO_CATALOG } from './engine/catalog/demo-catalog';
-export { DEMO_SCENARIO, DEMO_TASK, type DemoLine } from './engine/fixtures/demo-scenario';
+export { DEMO_SCENARIO, DEMO_TASK, DEMO_TASK_MONOLOGUE, TEAM_AUDIO_SCRIPT, type DemoLine } from './engine/fixtures/demo-scenario';
 export { analyzeUtterance } from './engine/rules/compare';
 export { extractCandidates } from './engine/rules/extract';
 export { TaskLogRepository } from './repositories/task-log-repository';

@@ -44,7 +44,7 @@ export class OnlineAsr implements AsrProvider {
   ) {}
 
   async transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript> {
-    const out = await post<{ text: string; model: string }>(this.proxyUrl, '/api/transcribe', { wavBase64: toBase64(encodeWav(pcm16k, 16000)), hints: this.hints }, 60000);
+    const out = await post<{ text: string; model: string }>(this.proxyUrl, '/api/transcribe', { wavBase64: toBase64(encodeWav(pcm16k, 16000)), hints: [...new Set([...(ctx.vocabulary ?? []), ...this.hints])] }, 60000);
     this.modelVersion = `online:${out.model}`;
     const text = cleanTranscript(out.text ?? '');
     const endMs = ctx.utteranceStartMs + Math.round((pcm16k.length / 16000) * 1000);

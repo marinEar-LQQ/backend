@@ -27,6 +27,15 @@ export const DEMO_TASK: TaskDraft = {
   note: '시연 작업 (대본 1 기준)',
 };
 
+/** 독백 시연 녹음(fixtures/audio/team3)용 작업: 한라호를 신선대부두 2번으로 잘못 기록 → 교신의 "3번"이 장소 차이로 잡힌다 */
+export const DEMO_TASK_MONOLOGUE: TaskDraft = {
+  ownVessel: '한라호',
+  targetVessel: '한라호',
+  terminalId: 'SINSEONDAE',
+  berthId: 'T2',
+  note: '시연 작업 (독백 대본 기준)',
+};
+
 const same = (id: string, label: string, text: string, durationMs: number): DemoLine => ({ id, label, enhanced: text, raw: text, durationMs });
 
 export const DEMO_SCENARIO: DemoLine[] = [
@@ -68,6 +77,27 @@ export const DEMO_SCENARIO: DemoLine[] = [
  *  - demo-scriptN: fixtures/audio/demo (약한 잡음, 백엔드 제작)
  */
 export const TEAM_AUDIO_SCRIPT: Record<string, Array<{ enhanced: string; raw?: string }>> = {
+  // 독백 시연 녹음 (fixtures/audio/team3). 완화음 = 대본(선박명 힌트 + gemini-3.5-flash 실측과 동일), 원음 = 힌트 없는 lite 실측 오인식
+  'mono-a': [
+    {
+      enhanced: '부산항 관제, 여기는 한라호입니다. 지금 오륙도 근처를 지나고 있습니다. 신선대부두 3번에 배를 댈 예정이고, 속도는 12노트입니다. 앞에 나가는 배가 보여서 속도를 8노트로 줄이고 오른쪽으로 비켜 가겠습니다. 도착은 오후 2시 30분쯤 예상합니다. 이상.',
+      raw: '부산항 관제, 여기는 한라호입니다. 지금 오륙도 근처를 지나고 있습니다. 신선대부두 3번에 배를 댈 예정이고, 속도는 12노트입니다. 앞에 나가는 배가 보여서 속도를 8노트로 줄이고 오른쪽으로 비켜 가겠습니다. 보착은 오후 2시 30분쯤 예상합니다. 이상.',
+    },
+  ],
+  'mono-b': [
+    {
+      enhanced: '인천항 관제, 여기는 동방호입니다. 엔진에 문제가 생겨서 속도가 잘 안 납니다. 지금 위치는 팔미도 남쪽 2마일입니다.',
+      raw: '인천항 관제, 여기는 공방호입니다. 엔진에 문제가 생겨서 속도가 잘 안 납니다. 지금 위치는 팔미도 남쪽 2마일입니다.',
+    },
+    { enhanced: '끌어 줄 배가 필요합니다. 20분 정도는 이 자리에서 기다릴 수 있습니다. 주변 배들은 500미터 이상 떨어져 주시고, 연락은 16번 채널로 부탁드립니다.' },
+  ],
+  'mono-c': [
+    {
+      enhanced: '제7해진호, 여기는 제3해진호. 지금 부산 남쪽 바다에서 고등어 떼를 크게 봤다. 깊이는 60미터쯤 되고, 동쪽으로 움직이고 있다. 우리는 30분 안에 그쪽으로 간다. 너는 왼쪽으로 100미터 떨어져서 기다려라.',
+      raw: '내 칠레진호, 여기는 제3해진호. 지금 부산 남쪽 바다에서 고등어 떼를 크게 봤다. 깊이는 60미터쯤 되고, 동쪽으로 움직이고 있다. 우리는 30분 안에 그쪽으로 간다. 너는 왼쪽으로 100미터 떨어져서 기다려라.',
+    },
+    { enhanced: '이상.' },
+  ],
   mono_noisy: [
     { enhanced: '오늘 바람이 많이 부네.', raw: '오늘 사람이 많이 보네.' },
     { enhanced: '세 시에 교대하고 라면이나 먹어야겠다.', raw: '대시에 두대하고 라면이나 먹어야겠다.' },

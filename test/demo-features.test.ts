@@ -97,3 +97,34 @@ describe('시연 녹음(mono_noisy) 지원', () => {
     expect(d.filter((x) => x.op === 'same').map((x) => x.enhanced)).toEqual(['오늘', '많이', '라면이나', '먹어야겠다.']);
   });
 });
+
+describe('독백 시연 대본 추출 (team3)', () => {
+  const mono = (t: string, f: string) => extractCandidates(tr(t), 'enhanced', DEMO_CATALOG).candidates.filter((c) => c.field === f).map((c) => c.value);
+  it('대본 1: 선박·장소·터미널·선석·속력·지시', () => {
+    const t = '부산항 관제, 여기는 한라호입니다. 지금 오륙도 근처를 지나고 있습니다. 신선대부두 3번에 배를 댈 예정이고, 속도는 12노트입니다. 앞에 나가는 배가 보여서 속도를 8노트로 줄이고 오른쪽으로 비켜 가겠습니다. 도착은 오후 2시 30분쯤 예상합니다.';
+    expect(mono(t, 'vessel')).toEqual(['한라호']);
+    expect(mono(t, 'place')).toEqual(['부산항', '오륙도']);
+    expect(mono(t, 'terminal')).toEqual(['SINSEONDAE']);
+    expect(mono(t, 'berth')).toEqual(['T3']);
+    expect(mono(t, 'speed')).toEqual(['12kn', '8kn']);
+    expect(mono(t, 'time')).toEqual(['14:30']);
+    expect(mono(t, 'instruction')).toEqual(expect.arrayContaining(['REDUCE_SPEED', 'ALTER_COURSE_STBD']));
+  });
+  it('"신선대부두 세 번" (고유어 수사)도 3번 선석', () => {
+    expect(mono('신선대부두 세 번에 배를 댈 예정', 'berth')).toEqual(['T3']);
+    expect(mono('신선대 부두 세 번째 배를 댈 예정이고', 'berth')).toEqual(['T3']); // flash-lite 실측 오인식
+  });
+  it('대본 2: 엔진 고장·예인 요청·거리·채널', () => {
+    const t = '인천항 관제, 여기는 동방호입니다. 엔진에 문제가 생겨서 속도가 잘 안 납니다. 지금 위치는 팔미도 남쪽 2마일입니다. 끌어 줄 배가 필요합니다. 주변 배들은 500미터 이상 떨어져 주시고, 연락은 16번 채널로 부탁드립니다.';
+    expect(mono(t, 'vessel')).toEqual(['동방호']);
+    expect(mono(t, 'distance')).toEqual(['2mile', '500m']);
+    expect(mono(t, 'identifier')).toEqual(['CH 16']);
+    expect(mono(t, 'instruction')).toEqual(expect.arrayContaining(['ENGINE_TROUBLE', 'TOW_REQUESTED', 'KEEP_CLEAR']));
+  });
+  it('요약: 한쪽에서만 들린 숫자는 확인 필요 (12노트 vs 10노트)', () => {
+    const o = analyzeUtterance({ enhanced: tr('여기는 한라호입니다. 속도는 12노트입니다.'), raw: tr('여기는 한라호입니다. 속도는 10노트입니다.'), crossCheck: 'complete', task: TASK_V1, catalog: DEMO_CATALOG });
+    const r = { ...o, enhancedTranscript: tr('x'), rawTranscript: tr('y'), crossCheck: 'complete' } as unknown as AnalysisResult;
+    const speed = buildSummary(r, 'en')!.lines.filter((l) => l.field === 'speed');
+    expect(speed).toEqual([{ field: 'speed', label: 'Speed', value: '[12 knots / 10 knots] (check)', uncertain: true }]);
+  });
+});

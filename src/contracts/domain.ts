@@ -158,7 +158,9 @@ export type EntityField =
   /** 침로 (예: 320°) */
   | 'course'
   /** 관제 지시어 코드 (InstructionCode) */
-  | 'instruction';
+  | 'instruction'
+  /** 장소 (카탈로그 places: 오륙도, 팔미도 …) */
+  | 'place';
 
 export type TranscriptSource = AudioVariant;
 
@@ -205,7 +207,11 @@ export type InstructionCode =
   | 'PROCEED'
   | 'ALTER_COURSE_STBD'
   | 'ALTER_COURSE_PORT'
-  | 'CORRECTION';
+  | 'CORRECTION'
+  /** 엔진 문제 보고 */
+  | 'ENGINE_TROUBLE'
+  /** 예인(끌어 줄 배) 요청 */
+  | 'TOW_REQUESTED';
 
 /** 등록 작업이 없으면 unknown + NO_TASK (비교 불가) */
 export type ComparisonKind = 'match' | 'difference' | 'ambiguous' | 'unrelated' | 'unknown';
@@ -316,7 +322,7 @@ export interface Translation {
 }
 
 export interface SummaryLine {
-  field: 'vessel' | 'terminal' | 'berth' | 'time' | 'speed' | 'course' | 'instruction';
+  field: 'vessel' | 'terminal' | 'berth' | 'place' | 'time' | 'speed' | 'course' | 'distance' | 'identifier' | 'instruction';
   label: string;
   value: string;
   /** 불확실한 값이면 true — 확정값처럼 표시하지 말 것 */
@@ -414,8 +420,16 @@ export interface TerminalEntry {
   verifiedAt: string | null;
 }
 
+export interface PlaceEntry {
+  placeId: string;
+  label: string;
+  aliases: string[];
+}
+
 export interface CatalogManifest {
   catalogVersion: string;
+  /** 터미널이 아닌 장소 (섬·수로·항만 구역). 요약 카드의 "위치"에 쓴다 */
+  places?: PlaceEntry[];
   /** demo = 시연 fixture. 실제 운영 카탈로그는 공식 자료로 확정 */
   kind: 'demo' | 'verified';
   sourceRefs: string[];

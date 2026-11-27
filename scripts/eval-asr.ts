@@ -89,7 +89,9 @@ function loadEnv(): Record<string, string> {
 function geminiAsr(modelId: string) {
   const apiKey = process.env.GEMINI_API_KEY ?? loadEnv().GEMINI_API_KEY;
   if (!apiKey) throw new Error('.env 에 GEMINI_API_KEY 가 없습니다');
-  const hints = process.env.HINTS === '0' ? [] : DEMO_CATALOG.terminals.map((t) => t.terminalId);
+  // VOCAB="한라호,동방호" — 작업 등록 선박명처럼 엔진이 넣어 주는 힌트를 흉내 낸다
+  const vocab = (process.env.VOCAB ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const hints = process.env.HINTS === '0' ? vocab : [...vocab, ...DEMO_CATALOG.terminals.map((t) => t.terminalId)];
   console.error(`온라인 전사: ${modelId} (용어 힌트 ${hints.length ? hints.join(',') : '없음'})`);
   return {
     async transcribe(pcm16k: Float32Array) {

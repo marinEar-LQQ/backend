@@ -1,4 +1,4 @@
-import type { AnalysisResult, InstructionCode, LangCode, SummaryLine, TranslationSummary } from '../../contracts';
+import type { AnalysisResult, CatalogManifest, InstructionCode, LangCode, SummaryLine, TranslationSummary } from '../../contracts';
 
 /**
  * 정형 요약 카드: 번역 모델 없이 추출값을 미리 번역해 둔 틀에 채운다.
@@ -11,10 +11,10 @@ type SummaryLang = 'ko' | 'en' | 'id' | 'vi';
 export const SUMMARY_LANGS: readonly LangCode[] = ['ko', 'en', 'id', 'vi'];
 
 const LABELS: Record<SummaryLang, Record<SummaryLine['field'], string> & { check: string }> = {
-  ko: { vessel: '선박', terminal: '터미널', berth: '선석', time: '시각', speed: '속력', course: '침로', instruction: '지시', check: '확인 필요' },
-  en: { vessel: 'Vessel', terminal: 'Terminal', berth: 'Berth', time: 'Time', speed: 'Speed', course: 'Course', instruction: 'Instruction', check: 'check' },
-  id: { vessel: 'Kapal', terminal: 'Terminal', berth: 'Dermaga', time: 'Waktu', speed: 'Kecepatan', course: 'Haluan', instruction: 'Instruksi', check: 'periksa' },
-  vi: { vessel: 'Tàu', terminal: 'Bến cảng', berth: 'Cầu cảng', time: 'Thời gian', speed: 'Tốc độ', course: 'Hướng đi', instruction: 'Chỉ thị', check: 'cần kiểm tra' },
+  ko: { vessel: '선박', terminal: '터미널', berth: '선석', place: '위치', distance: '거리', identifier: '식별', time: '시각', speed: '속력', course: '침로', instruction: '지시', check: '확인 필요' },
+  en: { vessel: 'Vessel', terminal: 'Terminal', berth: 'Berth', place: 'Location', distance: 'Distance', identifier: 'ID', time: 'Time', speed: 'Speed', course: 'Course', instruction: 'Instruction', check: 'check' },
+  id: { vessel: 'Kapal', terminal: 'Terminal', berth: 'Dermaga', place: 'Lokasi', distance: 'Jarak', identifier: 'ID', time: 'Waktu', speed: 'Kecepatan', course: 'Haluan', instruction: 'Instruksi', check: 'periksa' },
+  vi: { vessel: 'Tàu', terminal: 'Bến cảng', berth: 'Cầu cảng', place: 'Vị trí', distance: 'Khoảng cách', identifier: 'ID', time: 'Thời gian', speed: 'Tốc độ', course: 'Hướng đi', instruction: 'Chỉ thị', check: 'cần kiểm tra' },
 };
 
 export const PHRASEBOOK: Record<InstructionCode, Record<SummaryLang, string>> = {
@@ -28,6 +28,8 @@ export const PHRASEBOOK: Record<InstructionCode, Record<SummaryLang, string>> = 
   ALTER_COURSE_STBD: { ko: '우현으로 변침', en: 'Alter course to starboard', id: 'Ubah haluan ke kanan', vi: 'Chuyển hướng sang phải' },
   ALTER_COURSE_PORT: { ko: '좌현으로 변침', en: 'Alter course to port', id: 'Ubah haluan ke kiri', vi: 'Chuyển hướng sang trái' },
   CORRECTION: { ko: '정정', en: 'Correction', id: 'Koreksi', vi: 'Đính chính' },
+  ENGINE_TROUBLE: { ko: '엔진 이상', en: 'Engine trouble', id: 'Gangguan mesin', vi: 'Sự cố động cơ' },
+  TOW_REQUESTED: { ko: '예인 요청', en: 'Tow requested', id: 'Meminta kapal tunda', vi: 'Yêu cầu tàu kéo' },
 };
 
 function speedText(v: string, lang: SummaryLang): string {
@@ -35,7 +37,8 @@ function speedText(v: string, lang: SummaryLang): string {
   return { ko: `${n}노트`, en: `${n} knots`, id: `${n} knot`, vi: `${n} hải lý/giờ` }[lang];
 }
 
-export function buildSummary(result: AnalysisResult, lang: LangCode): TranslationSummary | null {
+export function buildSummary(result: AnalysisResult, lang: LangCode, catalog?: CatalogManifest): TranslationSummary | null {
+  const termName = (id: string) => catalog?.terminals.find((t) => t.terminalId === id)?.displayName ?? id;
   if (!(SUMMARY_LANGS as readonly string[]).includes(lang)) return null;
   const L = LABELS[lang as SummaryLang];
   const lines: SummaryLine[] = [];
@@ -55,11 +58,27 @@ export function buildSummary(result: AnalysisResult, lang: LangCode): Translatio
 
   // 터미널·선석: 한 문장에 여러 장소가 나오면 모두 보여 준다
   const terminals = [...new Set(result.candidates.filter((c) => c.field === 'terminal' && !c.negated).map((c) => c.value))];
-  push('terminal', result.entities.terminalId ?? (terminals.length ? terminals.join(', ') : null), 'terminalId');
+  push('terminal', result.entities.terminalId ? termName(result.entities.terminalId) : terminals.length ? terminals.map(termName).join(', ') : null, 'terminalId');
   push('berth', result.entities.berthId ? result.entities.berthId.replace(/^T/, '') : null, 'berthId');
   push('time', result.entities.time, 'time');
-  if (result.entities.speed) push('speed', speedText(result.entities.speed, lang as SummaryLang));
+
+  // 여러 값이 나올 수 있는 항목 (속력 12→8노트, 거리 2마일·500미터 …):
+  // 원음·완화음 둘 다에서 들린 값만 확정으로, 한쪽에서만 들린 값은 "확인 필요"로 (12노트 vs 10노트 같은 숫자 오인식 대비)
+  const multi = (field: SummaryLine['field'], fmt: (v: string) => string = (v) => v, sep = ', ') => {
+    const vals = (src: 'raw' | 'enhanced') => [...new Set(result.candidates.filter((c) => c.field === field && c.source === src && !c.negated).map((c) => c.value))];
+    const enh = vals('enhanced');
+    const cross = result.crossCheck === 'complete' && result.rawTranscript;
+    const raw = cross ? vals('raw') : enh;
+    const agreed = enh.filter((v) => raw.includes(v));
+    const disputed = [...enh.filter((v) => !raw.includes(v)), ...raw.filter((v) => !enh.includes(v))];
+    if (agreed.length) lines.push({ field, label: L[field], value: agreed.map(fmt).join(sep), uncertain: false });
+    if (disputed.length) lines.push({ field, label: L[field], value: `[${disputed.map(fmt).join(' / ')}] (${L.check})`, uncertain: true });
+  };
+  multi('place');
+  multi('speed', (v) => speedText(v, lang as SummaryLang), ' → '); // 속력은 말한 순서대로 변화 (12 → 8노트)
   if (result.entities.course) push('course', result.entities.course);
+  multi('distance', (v) => v.replace(/mile$/, lang === 'ko' ? '마일' : ' mi').replace(/NM$/, lang === 'ko' ? '해리' : ' NM'));
+  multi('identifier', (v) => v.replace(/^CALLSIGN /, lang === 'ko' ? '호출부호 ' : 'Call sign ').replace(/^CH /, lang === 'ko' ? '채널 ' : 'Ch '));
   if (result.entities.instructions.length) {
     push('instruction', result.entities.instructions.map((c) => PHRASEBOOK[c][lang as SummaryLang]).join(' · '));
   }

@@ -10,6 +10,8 @@ export interface GeminiOptions {
   model: string;
   /** 무료 등급 속도 제한(429) 시 재시도 횟수 */
   retries?: number;
+  /** 요청 하나의 제한 시간 (넘으면 중단하고 오류) */
+  timeoutMs?: number;
 }
 
 interface GeminiPart {
@@ -39,6 +41,7 @@ export async function geminiGenerate(opts: GeminiOptions, parts: GeminiPart[], c
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': opts.apiKey },
       body,
+      ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
     if (res.ok) {
       const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };

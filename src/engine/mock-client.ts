@@ -3,7 +3,7 @@ import { TaskLogRepository } from '../repositories/task-log-repository';
 import { DEMO_CATALOG } from './catalog/demo-catalog';
 import { EngineCore } from './core';
 import { analyzePcm } from './file-input';
-import { DEMO_SCENARIO, DEMO_TASK, type DemoLine } from './fixtures/demo-scenario';
+import { DEMO_SCENARIO, DEMO_TASK, DEMO_TASK_MONOLOGUE, type DemoLine } from './fixtures/demo-scenario';
 import { FixtureAsr, FixtureTranslator, synthesizeScenarioAudio } from './fixtures/fixture-providers';
 
 export interface MockEngineOptions {
@@ -40,9 +40,9 @@ export class MockEngineClient extends EngineCore {
     return new MockEngineClient(repo, opts.catalog ?? DEMO_CATALOG, opts.lines ?? DEMO_SCENARIO, opts.asrDelayMs ?? 250);
   }
 
-  /** 시연 작업(해동호 / A선박 / PNIT T3) 등록 */
-  async seedDemoTask(): Promise<string> {
-    const { task } = await this.saveTask(DEMO_TASK);
+  /** 시연 작업 등록. script = 대본 1~3(현대부산호, PNIT 2번), monologue = 독백 녹음(한라호, 신선대부두 2번) */
+  async seedDemoTask(kind: 'script' | 'monologue' = 'script'): Promise<string> {
+    const { task } = await this.saveTask(kind === 'monologue' ? DEMO_TASK_MONOLOGUE : DEMO_TASK);
     return task.taskId;
   }
 

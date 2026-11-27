@@ -423,6 +423,8 @@ export class EngineCore implements EngineClient {
     await this.deps.repo.putUtterance(utterance);
 
     const task = await this.deps.repo.getTaskVersion(utterance.taskId, utterance.taskVersion);
+    // 받아쓰기 힌트: 등록된 내 배·대상 선박 이름 (실측: 선박명 오인식이 가장 많았다 — 한라호→"한라오")
+    if (task) Object.assign(ctxBase, { vocabulary: [task.ownVessel, task.targetVessel].filter(Boolean) });
 
     // 2) enhanced ASR → rev1 (crossCheck=pending)
     this.progress(job, 'asr_enhanced');
@@ -504,7 +506,7 @@ export class EngineCore implements EngineClient {
     const base = { utteranceId, sourceRevision: revision, targetLang: lang, protectedTokens: src.tokens, createdAt: this.now() };
     let translation: Translation;
 
-    const summary = buildSummary(result, lang);
+    const summary = buildSummary(result, lang, this.deps.catalog);
     const base2 = { ...base, summary };
 
     if (lang === 'ko') {

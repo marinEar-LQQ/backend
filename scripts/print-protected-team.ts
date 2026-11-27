@@ -1,9 +1,9 @@
-import { DEMO_TASK, TEAM_AUDIO_SCRIPT } from '../src/engine/fixtures/demo-scenario';
+import { DEMO_TASK, DEMO_TASK_MONOLOGUE, TEAM_AUDIO_SCRIPT } from '../src/engine/fixtures/demo-scenario';
 import { FIXTURE_TRANSLATIONS } from '../src/engine/fixtures/fixture-providers';
 import { DEMO_CATALOG } from '../src/engine/catalog/demo-catalog';
 import { analyzeUtterance } from '../src/engine/rules/compare';
 import { buildProtectedSource } from '../src/engine/translate/protect';
-const task = { ...DEMO_TASK, taskId: 't', version: 1, createdAt: '', sourceReviewEventId: null } as never;
+const task = { ...(process.env.TASK === 'monologue' ? DEMO_TASK_MONOLOGUE : DEMO_TASK), taskId: 't', version: 1, createdAt: '', sourceReviewEventId: null } as never;
 const tr = (text: string) => ({ text, segments: [], modelVersion: null, wordAligned: false });
 for (const [file, segs] of Object.entries(TEAM_AUDIO_SCRIPT)) for (const [i, seg] of segs.entries()) {
   const o = analyzeUtterance({ enhanced: tr(seg.enhanced), raw: tr(seg.raw ?? seg.enhanced), crossCheck: 'complete', task, catalog: DEMO_CATALOG });

@@ -29,7 +29,8 @@ const VESSEL_STOP_NAMES = new Set([
   '호출부', '양', '수신양', '감도양',
 ]);
 
-const PARTICLE_AFTER = '(?=$|[\\s,.!?·~]|은|는|이|가|을|를|에|의|로|으로|도|와|과|께|랑|야|님|측)';
+// "한라호입니다", "동방호이고" 처럼 서술격 조사가 붙는 경우도 선박명 끝으로 본다
+const PARTICLE_AFTER = '(?=$|[\\s,.!?·~]|은|는|이|가|을|를|에|의|로|으로|도|와|과|께|랑|야|님|측|입니|입니다|이다|이고|예요|에서)';
 const CORRECTION_AFTER = /^\s*(?:이|가|은|는)?\s*(?:말고|아니고|아니라|아니야|아닙니다|아님|대신|취소)/;
 const CORRECTION_BETWEEN = /정정|말고|아니고|아니라|대신|취소/;
 const CHANGE_KEYWORDS = /변경|바꿔|바꾸|바뀌|바뀝|이동|옮겨|옮기|대신|말고|정정|아니고|아니라/g;
@@ -59,16 +60,18 @@ function englishDigits(s: string): string | null {
 }
 
 const INSTRUCTION_PATTERNS: Array<[InstructionCode, RegExp]> = [
-  ['REDUCE_SPEED', /감속|속력을?\s*줄|reduce\s+speed|slow\s+down/giu],
+  ['REDUCE_SPEED', /감속|(?:속력|속도)(?:을|를)?\s*(?:\S+\s*)?줄|reduce\s+speed|slow\s+down/giu],
   ['PASS_PORT_TO_PORT', /좌현\s*대\s*좌현|port\s+to\s+port/giu],
   ['PASS_STBD_TO_STBD', /우현\s*대\s*우현|starboard\s+to\s+starboard/giu],
-  ['KEEP_CLEAR', /우회|피해\s*가|피하|keep(?:ing)?\s+clear/giu],
-  ['STAND_BY', /대기(?:해라|하십시오|하세요|바랍니다|중)|stand\s*by/giu],
+  ['KEEP_CLEAR', /우회|피해\s*가|피하|비켜|떨어져\s*(?:주|있|서)|keep(?:ing)?\s+clear/giu],
+  ['STAND_BY', /대기(?:해라|하십시오|하세요|바랍니다|중)|기다려|기다릴|기다리겠|stand\s*by/giu],
   ['BERTH', /접안|berthing|\bberth\b(?!\s*(?:one|two|three|four|five|\d))/giu],
   ['PROCEED', /이동하(?:십시오|세요|라)|진입\s*허가|proceed(?:ing)?/giu],
-  ['ALTER_COURSE_STBD', /우현으로\s*(?:크게\s*)?(?:돌|변침|피)/gu],
-  ['ALTER_COURSE_PORT', /좌현으로\s*(?:크게\s*)?(?:돌|변침|피)/gu],
+  ['ALTER_COURSE_STBD', /(?:우현|오른쪽)으로\s*(?:크게\s*)?(?:돌|변침|피|비켜)/gu],
+  ['ALTER_COURSE_PORT', /(?:좌현|왼쪽)으로\s*(?:크게\s*)?(?:돌|변침|피|비켜|\d+\s*(?:미터|m)\s*떨어)/gu],
   ['CORRECTION', /정정합니다|정정,|correction/giu],
+  ['ENGINE_TROUBLE', /엔진(?:에|이)?\s*(?:문제|고장|이상)|engine\s+(?:trouble|failure)/giu],
+  ['TOW_REQUESTED', /끌어\s*줄\s*배|예인(?:선|\s*요청|이\s*필요)|need\s+(?:a\s+)?tow/giu],
 ];
 
 function escapeRe(s: string): string {
@@ -160,6 +163,27 @@ export function extractCandidates(
     // Whisper 가 영어 교신의 berth 를 "birth" 로 적는 경우가 실측에서 나옴
     [/\b(?:berth|birth)\s*(one|two|three|four|five|\d)\b/giu, (m) => (['one', 'two', 'three', 'four', 'five'].indexOf(m[1]!.toLowerCase()) + 1) || Number(m[1])],
   ];
+  // 터미널 이름 바로 뒤의 "N번" / "세 번" ("신선대부두 3번에", "신선대부두 세 번에") → 선석
+  // "세 번째"도 선석으로 본다: 실측(flash-lite)에서 "신선대부두 3번에"를 "신선대 부두 세 번째"로 적음
+  const nativeNum: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5 };
+  for (const h of hits.filter((x) => x.field === 'terminal')) {
+    const m = text.slice(h.end).match(/^(\s*)(\d{1,2}|다섯|한|두|세|네|일|이|삼|사|오)\s*번(?:째)?(?:\s*선석)?(?!\s*채널)/u);
+    if (!m) continue;
+    const n = /^\d+$/.test(m[2]!) ? Number(m[2]) : nativeNum[m[2]!]!;
+    const start = h.end + m[1]!.length;
+    const end = h.end + m[0].length;
+    if (!overlaps(hits, start, end)) hits.push({ field: 'berth', value: `T${n}`, start, end, method: 'pattern' });
+  }
+
+  // 장소 (카탈로그 places)
+  for (const p of [...(catalog.places ?? [])].flatMap((pl) => pl.aliases.map((a) => ({ a, id: pl.label }))).sort((x, y) => y.a.length - x.a.length)) {
+    for (const m of text.matchAll(new RegExp(aliasPattern(p.a), 'gu'))) {
+      const start = m.index!;
+      const end = start + m[0].length;
+      if (!overlaps(hits, start, end)) hits.push({ field: 'place', value: p.id, start, end, method: 'catalog-alias' });
+    }
+  }
+
   // 터미널 약어 바로 뒤에 붙은 T+숫자 ("HP NTT 3" → HPNT + T3)
   for (const h of hits.filter((x) => x.field === 'terminal')) {
     const m = text.slice(h.end).match(/^[Tt][\s\-]*(\d{1,2})(?!\d)/);
@@ -210,7 +234,7 @@ export function extractCandidates(
   }
 
   // 4-b) 속력: "8노트", "속력 팔 노트", "속력 일일 노트"(=11, 무전식 한 자리씩 읽기), "ten knots"
-  for (const m of text.matchAll(/(?:속력\s*([공영일이삼사오육칠팔구]{1,3})|(\d+(?:\.\d+)?))\s*노트|\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*knots?\b/giu)) {
+  for (const m of text.matchAll(/(?:(?:속력|속도)(?:은|는|을|를)?\s*([공영일이삼사오육칠팔구]{1,3})|(\d+(?:\.\d+)?))\s*노트|\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*knots?\b/giu)) {
     const start = m.index!;
     const end = start + m[0].length;
     const v = m[1] ? sinoDigits(m[1]) : m[2] ? m[2] : englishNumber(m[3]!);
@@ -230,6 +254,13 @@ export function extractCandidates(
     for (const m of text.matchAll(re)) {
       hits.push({ field: 'instruction', value: code, start: m.index!, end: m.index! + m[0].length, method: 'keyword' });
     }
+  }
+
+  // 5-b) 무전 채널: "16번 채널", "채널 16"
+  for (const m of text.matchAll(/(\d{1,2})\s*번\s*채널|채널\s*(\d{1,2})(?!\d)|channel\s*(\d{1,2})/giu)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    if (!overlaps(hits, start, end)) hits.push({ field: 'identifier', value: `CH ${m[1] ?? m[2] ?? m[3]}`, start, end, method: 'pattern' });
   }
 
   // 5-a) 호출부호: "호출부호 6KLM", "call sign D7AB" (영문·숫자 3~7자)

@@ -1,6 +1,6 @@
 import type { AnalysisResult, AnyEngineEvent, EngineClient, LangCode } from '../src/contracts';
 import { DEFAULT_ASSET_MANIFEST } from '../src/engine/assets/asset-manager';
-import { DEMO_TASK } from '../src/engine/fixtures/demo-scenario';
+import { DEMO_TASK, DEMO_TASK_MONOLOGUE } from '../src/engine/fixtures/demo-scenario';
 import { analyzePcm, decodeAudioFile } from '../src/engine/file-input';
 import { PerfRecorder } from '../src/engine/metrics';
 import { WorkerEngineClient } from '../src/engine/worker-client';
@@ -89,7 +89,9 @@ $('ready').onclick = async () => engine && log(JSON.stringify(await engine.check
 
 $('seed').onclick = async () => {
   if (!engine) return log('엔진을 먼저 시작하세요');
-  const { task, version } = await engine.saveTask(DEMO_TASK);
+  // 독백 녹음(team3)을 고른 상태면 독백용 작업(한라호 / 신선대부두 2번)을 등록
+  const mono = ($('sample') as HTMLSelectElement).value.includes('team3');
+  const { task, version } = await engine.saveTask(mono ? DEMO_TASK_MONOLOGUE : DEMO_TASK);
   taskId = task.taskId;
   log(`작업 등록 ${taskId} v${version.version}`);
 };

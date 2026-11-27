@@ -75,5 +75,27 @@ export const DEMO_CATALOG: CatalogManifest = {
       sourceUrl: null,
       verifiedAt: null,
     },
+    {
+      terminalId: 'SINSEONDAE',
+      officialName: '신선대부두',
+      displayName: '신선대부두',
+      aliases: ['신선대부두', '신선대 부두', '신선대'],
+      // 실측 오인식: "신선대부도"
+      confusables: ['신선대부도', '신선대 부도'],
+      port: '부산항 북항',
+      berths: demoBerths(),
+      sourceUrl: null,
+      verifiedAt: null,
+    },
+  ],
+  // 시연 대본에 나오는 장소 (공식 자료 대조 전)
+  places: [
+    { placeId: 'OREUKDO', label: '오륙도', aliases: ['오륙도'] },
+    { placeId: 'PALMIDO', label: '팔미도', aliases: ['팔미도'] },
+    { placeId: 'GADEOK_CHANNEL', label: '가덕수로', aliases: ['가덕수로', '가덕 수로'] },
+    { placeId: 'BUSAN_SOUTH_SEA', label: '부산 남쪽 바다', aliases: ['부산 남쪽 바다', '부산 남쪽'] },
+    { placeId: 'NAMOEHANG', label: '부산남항 남외항', aliases: ['남외항'] },
+    { placeId: 'BUSAN_PORT', label: '부산항', aliases: ['부산항'] },
+    { placeId: 'INCHEON_PORT', label: '인천항', aliases: ['인천항'] },
   ],
 };
