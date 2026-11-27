@@ -54,6 +54,8 @@ import { buildProtectedSource, missingValues, restoreTokens, splitClauses } from
 import { buildSummary } from './translate/summary';
 import { diffTranscripts } from './rules/diff';
 import { collapseRepeats } from './models/transformers-providers';
+import { seedDemoHistory, type DemoHistoryFile, type DemoHistoryResult } from './fixtures/demo-history';
+import { FixtureAsr, FixtureTranslator } from './fixtures/fixture-providers';
 
 export interface EngineCoreDeps {
   repo: TaskLogRepository;
@@ -675,6 +677,30 @@ export class EngineCore implements EngineClient {
 
   async exportTaskLog(taskId: string, format: ExportFormat): Promise<ExportedFile> {
     return exportLog(await this.getTaskLog(taskId), format, this.now());
+  }
+
+  /**
+   * [확장 · 시연 편의] 처리한 작업을 앱 DB 에 미리 쌓는다 (fixtures/demo-history.ts).
+   * 시연 고정 데이터 엔진이 같은 저장소에 쓰고, 끝나면 "지금 작업"을 현재 작업으로 알린다.
+   * 결과 origin=fixture → 화면에 "시연 데이터" 배지. 음성은 실제 녹음.
+   */
+  async seedDemoHistory(files: DemoHistoryFile[]): Promise<DemoHistoryResult> {
+    const seeder = new EngineCore({
+      repo: this.deps.repo,
+      catalog: this.deps.catalog,
+      asr: new FixtureAsr(undefined, 0),
+      translator: new FixtureTranslator(),
+      fixtureMode: true,
+      ...(this.deps.segmenter ? { segmenter: this.deps.segmenter } : {}),
+      now: this.now,
+      newId: this.newId,
+    });
+    const res = await seedDemoHistory(seeder, files, this.newId);
+    const log = await this.getTaskLog(res.currentTaskId);
+    const active = log.versions.find((v) => v.version === log.task.activeVersion);
+    this.activeVersionCache.set(log.task.taskId, log.task.activeVersion);
+    if (active) this.emit('task.updated', { task: log.task, version: active });
+    return res;
   }
 }
 

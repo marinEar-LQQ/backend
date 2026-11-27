@@ -121,6 +121,10 @@ export class WorkerEngineClient implements EngineClient {
   importTaskLog(json: string): Promise<Task> {
     return this.call('importTaskLog', [json]);
   }
+  /** WAV 버퍼는 Worker 로 넘긴다 (복사 없이). 넘긴 뒤 호출한 쪽의 버퍼는 비게 된다 */
+  seedDemoHistory(files: { name: string; wav: ArrayBuffer }[]): Promise<{ pastTaskId: string; currentTaskId: string; utterances: number }> {
+    return this.call('seedDemoHistory', [files], files.map((f) => f.wav));
+  }
   saveNote(taskId: string, text: string, noteId?: string): Promise<TaskNote> {
     return this.call('saveNote', [taskId, text, noteId]);
   }

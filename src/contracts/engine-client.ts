@@ -143,5 +143,11 @@ export interface EngineClient {
    */
   importTaskLog(json: string): Promise<Task>;
 
+  /**
+   * [확장 · 시연 편의] 팀 녹음(WAV)으로 "처리한 작업"(지난 작업 1개 + 지금 작업의 교신 2건)을 앱 DB 에 미리 쌓는다.
+   * 결과는 시연 고정 데이터(origin=fixture, "시연 데이터" 배지), 음성은 실제 녹음. 끝나면 지금 작업으로 task.updated.
+   */
+  seedDemoHistory?(files: { name: string; wav: ArrayBuffer }[]): Promise<{ pastTaskId: string; currentTaskId: string; utterances: number }>;
+
   subscribe(listener: EngineEventListener): () => void;
 }

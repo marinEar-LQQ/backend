@@ -33,7 +33,8 @@
     "./worker": {
       "types": "./dist/workers/engine.worker.d.ts",
       "default": "./dist/workers/engine.worker.js"
-    }
+    },
+    "./fixtures/*": "./fixtures/*"
   },
   "files": [
     "dist",

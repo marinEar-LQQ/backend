@@ -53,7 +53,7 @@ async function init(msg: WorkerInit): Promise<EngineCore> {
 
 const METHODS = new Set<keyof EngineClient | 'markDisconnected'>([
   'loadAssets', 'checkReadiness', 'saveTask', 'openSession', 'appendAudio', 'closeSession', 'requestTranslation',
-  'getAudioClip', 'reviewUtterance', 'getTaskLog', 'exportTaskLog', 'saveNote', 'listTasks', 'markDisconnected', 'importTaskLog',
+  'getAudioClip', 'reviewUtterance', 'getTaskLog', 'exportTaskLog', 'saveNote', 'listTasks', 'markDisconnected', 'importTaskLog', 'seedDemoHistory',
 ]);
 
 async function handle(cmd: WorkerCommand): Promise<void> {
