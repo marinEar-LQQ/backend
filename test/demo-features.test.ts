@@ -53,7 +53,7 @@ describe('정형 요약 카드', () => {
   it('en/id/vi 요약에 값은 그대로, 지시어는 표준 문구', () => {
     const r = run('A선박 PNIT 3번 선석, 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오.');
     const en = buildSummary(r, 'en')!;
-    expect(en.oneLine).toBe('Vessel: A선박 | Terminal: PNIT | Berth: 3 | Speed: 8 knots | Instruction: Reduce speed · Pass port to port');
+    expect(en.oneLine).toBe('Vessel: A선박 (Aseonbak) | Terminal: PNIT | Berth: 3 | Speed: 8 knots | Instruction: Reduce speed · Pass port to port');
     expect(buildSummary(r, 'vi')!.oneLine).toContain('Giảm tốc độ');
     expect(buildSummary(r, 'id')!.oneLine).toContain('Kurangi kecepatan');
     expect(buildSummary(r, 'my')).toBeNull();

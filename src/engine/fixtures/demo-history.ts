@@ -9,7 +9,8 @@ import { DEMO_TASK, DEMO_TASK_MONOLOGUE } from './demo-scenario';
  * 음성은 실제 녹음이 그대로 저장되어 "원음 듣기"가 실제 목소리로 재생된다.
  *
  *   지난 작업: 해동호 · PNIT T2 — 팀 대본 1~3 (잡음), 장소 차이는 교신대로 반영, 나머지 확인, 메모 + 작업 로그 저장
- *   지금 작업: 한라호 · 신선대부두 T2 — 독백 b(엔진 고장)·c(어선) 처리 완료. 독백 a 는 시연 때 직접 넣는다
+ *   지금 작업: 한라호 · 신선대부두 T2 — 독백 b(엔진 고장)·c(어선) 처리 완료 + 독백 a(장소 차이: 3번 선석)는 확인 전 상태로 남긴다
+ *   시각: 지난 작업은 약 3시간 전, 지금 작업은 40분 전부터, 장소 차이 교신은 5분 전 (setClock)
  */
 
 export interface DemoHistoryFile {
@@ -28,13 +29,22 @@ export interface DemoHistoryResult {
 export const DEMO_HISTORY_PLAN = {
   past: ['script1_noisy', 'script2_noisy', 'script3_noisy'],
   current: ['mono-b', 'mono-c'],
+  /** 지금 작업에 확인 전 상태로 남기는 녹음 — 핵심 기능(등록 장소와 다름)이 실시간 분석 없이도 보이게 */
+  pending: ['mono-a'],
 } as const;
 
 const NEEDS_CHECK = new Set(['difference', 'ambiguous']);
 
-async function analyze(seeder: EngineClient & { whenIdle(): Promise<void> }, taskId: string, files: DemoHistoryFile[], names: readonly string[]): Promise<number> {
+async function analyze(
+  seeder: EngineClient & { whenIdle(): Promise<void> },
+  taskId: string,
+  files: DemoHistoryFile[],
+  names: readonly string[],
+  at: (i: number) => void = () => {},
+): Promise<number> {
   let n = 0;
-  for (const name of names) {
+  for (const [i, name] of names.entries()) {
+    at(i);
     const f = files.find((x) => x.name.includes(name));
     if (!f) continue;
     const { pcm, sampleRate } = decodeWav(f.wav);
@@ -71,13 +81,17 @@ export async function seedDemoHistory(
   seeder: EngineClient & { whenIdle(): Promise<void> },
   files: DemoHistoryFile[],
   newId: (p: string) => string,
+  /** 다음에 기록할 시각을 '몇 분 전'으로 맞춘다 (없으면 모두 지금 시각) */
+  setClock: (minutesAgo: number) => void = () => {},
 ): Promise<DemoHistoryResult> {
   // taskId 없이 저장 = 새 작업
   const save = async (draft: TaskDraft) => (await seeder.saveTask(draft)).task.taskId;
 
   // 지난 작업
+  setClock(190);
   const pastTaskId = await save(DEMO_TASK);
-  let utterances = await analyze(seeder, pastTaskId, files, DEMO_HISTORY_PLAN.past);
+  let utterances = await analyze(seeder, pastTaskId, files, DEMO_HISTORY_PLAN.past, (i) => setClock(180 - i * 12));
+  setClock(140);
   await checkAll(seeder, pastTaskId, true, newId);
   await seeder.saveNote(pastTaskId, '관제에 HPNT 2번 변경 재확인함. 다음 당직자에게 인계.');
   const past = await seeder.getTaskLog(pastTaskId);
@@ -85,9 +99,14 @@ export async function seedDemoHistory(
   await seeder.saveNote(pastTaskId, `작업 로그 저장 · 교신 ${past.counts.utterances}건 · 확인 ${checked}건 · 미확인 0건`);
 
   // 지금 작업 (가장 나중에 바뀐 작업이 앱을 열 때 현재 작업이 된다)
+  setClock(45);
   const currentTaskId = await save(DEMO_TASK_MONOLOGUE);
-  utterances += await analyze(seeder, currentTaskId, files, DEMO_HISTORY_PLAN.current);
+  utterances += await analyze(seeder, currentTaskId, files, DEMO_HISTORY_PLAN.current, (i) => setClock(40 - i * 12));
+  setClock(15);
   await checkAll(seeder, currentTaskId, false, newId);
+  // 장소 차이 교신은 확인하지 않고 남긴다 → 교신 화면에 "확인할 교신 1건" 띠가 뜬다
+  setClock(5);
+  utterances += await analyze(seeder, currentTaskId, files, DEMO_HISTORY_PLAN.pending);
 
   return { pastTaskId, currentTaskId, utterances };
 }

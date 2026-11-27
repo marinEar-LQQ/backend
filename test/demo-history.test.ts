@@ -21,10 +21,10 @@ describe('시연 편의: 처리한 작업 미리 쌓기', () => {
     core.subscribe((e) => events.push(e));
     const files = [
       ...DEMO_HISTORY_PLAN.past.map((n) => ({ name: `${n}.wav`, wav: wav(`fixtures/audio/team/${n}.wav`) })),
-      ...DEMO_HISTORY_PLAN.current.map((n) => ({ name: `${n}.wav`, wav: wav(`fixtures/audio/team3/${n}.wav`) })),
+      ...[...DEMO_HISTORY_PLAN.current, ...DEMO_HISTORY_PLAN.pending].map((n) => ({ name: `${n}.wav`, wav: wav(`fixtures/audio/team3/${n}.wav`) })),
     ];
     const res = await core.seedDemoHistory(files);
-    expect(res.utterances).toBe(5);
+    expect(res.utterances).toBe(6);
 
     const past = await core.getTaskLog(res.pastTaskId);
     expect(past.utterances.length).toBeGreaterThan(5);
@@ -37,6 +37,16 @@ describe('시연 편의: 처리한 작업 미리 쌓기', () => {
 
     const current = await core.getTaskLog(res.currentTaskId);
     expect(current.utterances.length).toBeGreaterThanOrEqual(2);
+    // 장소 차이 교신 1건은 확인 전 상태로 남는다 (등록 T2, 교신 3번)
+    const open = current.utterances.filter((u) => u.reviewState === 'unreviewed' && u.results.at(-1)!.comparison.kind === 'difference');
+    expect(open.length).toBe(1);
+    // 시각이 벌어져 있다: 모두 같은 시각이 아니고, 미래 시각도 없다
+    const times = [...past.utterances, ...current.utterances].map((u) => u.utterance.capturedAt);
+    expect(new Set(times.map((t) => t.slice(0, 16))).size).toBeGreaterThan(3);
+    expect(times.every((t) => t <= new Date().toISOString())).toBe(true);
+    // 앱을 다시 열어도 지금 작업이 현재 작업 (갱신 시각이 가장 최근)
+    const tasks = [...(await core.listTasks())].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    expect(tasks[0]!.taskId).toBe(res.currentTaskId);
     // 원음 듣기: 실제 녹음이 저장되어 있다
     const clip = await core.getAudioClip(current.utterances[0]!.utterance.utteranceId, 'raw');
     expect(clip.status).toBe('available');

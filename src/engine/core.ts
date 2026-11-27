@@ -52,6 +52,7 @@ import type { AsrProvider, AssetLoader, TranslationProvider } from './providers'
 import { analyzeUtterance } from './rules/compare';
 import { buildProtectedSource, missingValues, restoreTokens, splitClauses } from './translate/protect';
 import { buildSummary } from './translate/summary';
+import { withRoman } from './translate/romanize';
 import { diffTranscripts } from './rules/diff';
 import { collapseRepeats } from './models/transformers-providers';
 import { seedDemoHistory, type DemoHistoryFile, type DemoHistoryResult } from './fixtures/demo-history';
@@ -538,7 +539,8 @@ export class EngineCore implements EngineClient {
       } else {
         try {
           const out = await tr.translate(src.protectedText, lang);
-          const restored = restoreTokens(out, src.tokens);
+          // 한글 이름(선박명 등)은 읽는 법을 덧붙여 복원한다
+          const restored = restoreTokens(out, src.tokens.map((t) => ({ ...t, value: withRoman(t.value) })));
           translation = { ...base2, status: restored.ok ? 'ready' : 'needs_check', text: restored.text, modelVersion: tr.modelVersion, issues: restored.issues, reference: false };
         } catch (e) {
           const unavailable = e instanceof EngineError && e.code === 'TRANSLATION_UNAVAILABLE';
@@ -692,10 +694,15 @@ export class EngineCore implements EngineClient {
       translator: new FixtureTranslator(),
       fixtureMode: true,
       ...(this.deps.segmenter ? { segmenter: this.deps.segmenter } : {}),
-      now: this.now,
+      // 쌓는 교신의 시각을 벌린다: 부를 때마다 조금씩 가는 시계, 작업마다 '몇 분 전'으로 맞춘다
+      now: () => new Date((clock += 7000)).toISOString(),
       newId: this.newId,
     });
-    const res = await seedDemoHistory(seeder, files, this.newId);
+    const realNow = Date.parse(this.now());
+    let clock = realNow;
+    const res = await seedDemoHistory(seeder, files, this.newId, (minutesAgo) => (clock = realNow - minutesAgo * 60000));
+    // 시각을 과거로 넣었으므로, 앱을 다시 열 때 지금 작업이 현재 작업이 되도록 갱신 시각만 지금으로
+    await this.deps.repo.touchTask(res.currentTaskId, this.now());
     const log = await this.getTaskLog(res.currentTaskId);
     const active = log.versions.find((v) => v.version === log.task.activeVersion);
     this.activeVersionCache.set(log.task.taskId, log.task.activeVersion);

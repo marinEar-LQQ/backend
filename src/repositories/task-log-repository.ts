@@ -61,6 +61,15 @@ export class TaskLogRepository {
     return transact(this.db, ['tasks'], 'readonly', (tx) => req(tx.objectStore('tasks').getAll() as IDBRequest<Task[]>));
   }
 
+  /** 작업의 갱신 시각만 바꾼다 (가장 최근에 바뀐 작업이 앱의 현재 작업) */
+  async touchTask(taskId: string, at: string): Promise<void> {
+    await transact(this.db, ['tasks'], 'readwrite', async (tx) => {
+      const store = tx.objectStore('tasks');
+      const task = (await req(store.get(taskId))) as Task | undefined;
+      if (task) await req(store.put({ ...task, updatedAt: at }));
+    });
+  }
+
   async getTask(taskId: string): Promise<Task | null> {
     return transact(this.db, ['tasks'], 'readonly', async (tx) => (await req(tx.objectStore('tasks').get(taskId))) ?? null);
   }

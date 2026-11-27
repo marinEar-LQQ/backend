@@ -1,3 +1,4 @@
+import { withRoman } from './romanize';
 import type { AnalysisResult, CatalogManifest, InstructionCode, LangCode, SummaryLine, TranslationSummary } from '../../contracts';
 
 /**
@@ -82,6 +83,9 @@ export function buildSummary(result: AnalysisResult, lang: LangCode, catalog?: C
   if (result.entities.instructions.length) {
     push('instruction', result.entities.instructions.map((c) => PHRASEBOOK[c][lang as SummaryLang]).join(' · '));
   }
+
+  // 외국어 화면: 한글 이름 옆에 읽는 법을 덧붙인다 (값 자체는 그대로)
+  if (lang !== 'ko') for (const l of lines) l.value = withRoman(l.value);
 
   return { lang, lines, oneLine: lines.map((l) => `${l.label}: ${l.value}`).join(' | ') };
 }
