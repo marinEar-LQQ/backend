@@ -64,6 +64,8 @@ export interface EngineCoreDeps {
   translator?: TranslationProvider | null;
   /** 시연 고정 데이터 모드 (결과 origin=fixture, 화면에서 배지로 구분) */
   fixtureMode?: boolean;
+  /** 준비 상태에 표시할 실행 방식 (기본 offline) */
+  mode?: 'online' | 'offline';
   segmenter?: Partial<SegmenterOptions>;
   maxQueue?: number;
   now?: () => string;
@@ -220,6 +222,7 @@ export class EngineCore implements EngineClient {
       offlineReady: canAnalyze && states.length > 0 && states.every((s) => s.status === 'ready' && s.selfTest === 'pass'),
       canAnalyze,
       fixtureMode: this.deps.fixtureMode ?? false,
+      mode: this.deps.fixtureMode ? 'fixture' : (this.deps.mode ?? 'offline'),
     };
   }
 

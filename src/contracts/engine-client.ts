@@ -39,6 +39,8 @@ export interface Readiness {
   canAnalyze: boolean;
   /** 모델 없이 시연 고정 데이터로만 동작하는 모드 */
   fixtureMode: boolean;
+  /** online = 중계 서버를 통한 클라우드 전사·번역 (음성이 외부로 전송됨), offline = 기기 안 모델, fixture = 시연 데이터 */
+  mode: 'online' | 'offline' | 'fixture';
 }
 
 export interface LoadProgress {

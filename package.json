@@ -10,7 +10,8 @@
     "prepare": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "harness": "vite"
+    "harness": "vite",
+    "server": "vite-node --config vitest.config.ts server/index.ts"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.0.0",

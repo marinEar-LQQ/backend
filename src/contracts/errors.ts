@@ -15,6 +15,7 @@ export type ErrorCode =
   | 'CONFIRMATION_REQUIRED' // confirmedByUser=false 로 apply
   | 'UNCERTAIN_VALUE' // 미확정 값·pending 결과의 반영 시도
   | 'SESSION_CLOSED'
+  | 'ONLINE_UNAVAILABLE' // 온라인 모드: 인터넷·중계 서버·외부 API 문제. 원음은 보존됨, 재시도 가능
   | 'INTERNAL';
 
 export interface EngineErrorPayload {

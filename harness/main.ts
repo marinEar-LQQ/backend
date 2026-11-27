@@ -61,6 +61,7 @@ $('start').onclick = async () => {
   const mode = (document.querySelector('input[name=mode]:checked') as HTMLInputElement).value;
   const client = new WorkerEngineClient(new EngineWorker(), {
     fixtureMode: mode === 'fixture',
+    mode: mode === 'online' ? 'online' : 'offline',
     allowRemote: !($('offline') as HTMLInputElement).checked,
     skipTranslation: ($('skipTr') as HTMLInputElement).checked,
     ...(($('device') as HTMLSelectElement).value ? { device: ($('device') as HTMLSelectElement).value as 'wasm' | 'webgpu' } : {}),

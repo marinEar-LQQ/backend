@@ -21,6 +21,31 @@ export default defineConfig({
 });
 ```
 
+## 0) 온라인 모드 (기본 권장 · 2026-11-27 전환)
+
+음성인식과 번역을 클라우드 모델로 처리한다. 모델 다운로드가 없고 더 정확하다. **음성이 분석을 위해 외부 서비스로 전송된다** — 화면에 고지할 것.
+오프라인 모델 코드는 그대로 남아 있다 (`mode: 'offline'`, 전환 전 상태는 태그 `offline-v1`).
+
+```bash
+# 1. 저장소 루트 .env 에 키를 넣는다 (git 에 올라가지 않음)
+#    GEMINI_API_KEY=...   음성인식 (gemini-3.5-flash-lite)
+#    NVIDIA_API_KEY=...   번역 (nemotron-3-ultra)
+# 2. 중계 서버 실행 — 키를 브라우저에 노출하지 않기 위한 프록시
+npm run server          # http://localhost:8787
+```
+
+```ts
+const engine = new WorkerEngineClient(new EngineWorker(), { mode: 'online', proxyUrl: 'http://localhost:8787' });
+const readiness = await engine.loadAssets(DEFAULT_ASSET_MANIFEST);   // 온라인: 서버 상태 확인만 (0.2초)
+// readiness.mode === 'online', 이후 호출·이벤트는 오프라인과 동일
+```
+
+- 발화 자르기, 원음/완화음 이중 인식, 판정 규칙, "확인 필요", 저장, 반영, 일지는 오프라인과 **같은 코드**.
+- 번역은 `reference: false` 로 온다 (자리표시 복원·검증 통과 시 `ready`). 정형 요약(`summary`)도 그대로 제공.
+- 실패 시 오류 코드 `ONLINE_UNAVAILABLE` (인터넷·서버·외부 API). 원음은 보존된다.
+- 실측(노트북 Chrome, 약한 잡음 시연 녹음): 발화당 처리 p50 4.4초 (오프라인 약 10초). 전사 CER 9~21% (오프라인 whisper-small 29~44%).
+- 한계: 강한 잡음에서는 용어 힌트 때문에 안 들린 코드(BNCT)를 적는 경우가 실측에서 나왔다 → 원음/완화음 교차 검사와 "확인 필요"가 계속 필요.
+
 ## 1) 화면 개발 / 시연 안전망: MockEngineClient
 
 실제 엔진과 같은 규칙·IndexedDB 를 쓰고 ASR/번역만 시연 고정 데이터(팀 대본 3개, 9개 대사)다.
@@ -131,6 +156,8 @@ await engine.reviewUtterance({
 - `src/engine/assets/` — AssetManager (manifest·해시·자체 검사·오프라인 차단)
 - `src/engine/core.ts` — EngineCore (EngineClient 구현)
 - `src/repositories/` — IndexedDB TaskLogRepository (원자적 apply)
+- `src/engine/online/` — 온라인 부품 (중계 서버 호출)
+- `src/online/` + `server/` — 중계 서버와 외부 API 호출 (키는 서버에만)
 - `src/workers/` — Worker 진입점
 - `harness/` — 백엔드 검증 페이지 (`npm run harness`)
 - `scripts/` — 평가: `eval-asr.ts`(원음/DSP/RNNoise, CER·핵심어), `eval-translate.ts`, `seg-probe.ts`

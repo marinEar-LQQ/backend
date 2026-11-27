@@ -14,6 +14,13 @@ export interface WorkerInit {
 }
 
 export interface WorkerEngineOptions {
+  /**
+   * online: 중계 서버(proxyUrl)를 통한 클라우드 전사·번역 — 모델 다운로드 없음, 음성이 외부로 전송됨
+   * offline(기본): 기기 안 모델 (whisper-small + Opus-MT)
+   */
+  mode?: 'online' | 'offline';
+  /** online 모드의 중계 서버 주소. 기본 http://localhost:8787 */
+  proxyUrl?: string;
   dbName?: string;
   allowRemote?: boolean;
   device?: 'webgpu' | 'wasm';

@@ -20,7 +20,8 @@ import { enhanceSpeech, type EnhanceOptions } from '../src/engine/audio/enhance'
 import { rnnoiseDenoise } from '../src/engine/audio/rnnoise';
 import { Segmenter } from '../src/engine/audio/segmenter';
 import { extractCandidates } from '../src/engine/rules/extract';
-import { WhisperAsr } from '../src/engine/models/transformers-providers';
+import { WhisperAsr, cleanTranscript } from '../src/engine/models/transformers-providers';
+import { geminiTranscribe } from '../src/online/gemini';
 
 type Variant = { name: string; run: (pcm: Float32Array) => Float32Array | Promise<Float32Array> };
 
@@ -64,6 +65,28 @@ function extracted(text: string, field: 'terminal' | 'berth'): string[] {
   return [...new Set(ex.candidates.filter((c) => c.field === field).map((c) => c.value))].sort();
 }
 
+function loadEnv(): Record<string, string> {
+  if (!fs.existsSync('.env')) return {};
+  return Object.fromEntries(
+    fs.readFileSync('.env', 'utf8').split(/\r?\n/).filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]),
+  );
+}
+
+function geminiAsr(modelId: string) {
+  const apiKey = process.env.GEMINI_API_KEY ?? loadEnv().GEMINI_API_KEY;
+  if (!apiKey) throw new Error('.env 에 GEMINI_API_KEY 가 없습니다');
+  const hints = process.env.HINTS === '0' ? [] : DEMO_CATALOG.terminals.map((t) => t.terminalId);
+  console.error(`온라인 전사: ${modelId} (용어 힌트 ${hints.length ? hints.join(',') : '없음'})`);
+  return {
+    async transcribe(pcm16k: Float32Array) {
+      const wav = Buffer.from(encodeWav(pcm16k, 16000)).toString('base64');
+      const text = cleanTranscript(await geminiTranscribe({ apiKey, model: modelId }, wav, hints));
+      await new Promise((r) => setTimeout(r, 1500)); // 무료 등급 속도 제한 여유
+      return { text, segments: [], modelVersion: modelId, wordAligned: false };
+    },
+  };
+}
+
 async function main() {
   const files = process.argv.slice(2).filter((a) => a.endsWith('.wav'));
   if (!files.length) throw new Error('wav 파일을 인자로 주세요');
@@ -74,7 +97,9 @@ async function main() {
 
   const model = { ...DEFAULT_ASSET_MANIFEST.models.find((m) => m.role === 'asr')!, ...(process.env.ASR_MODEL ? { modelId: process.env.ASR_MODEL } : {}) };
   console.error(`모델 로딩: ${model.modelId}`);
-  const asr = await WhisperAsr.create(model, 'cpu' as never);
+  // GEMINI_MODEL 이 있으면 온라인(Gemini) 전사로 평가: GEMINI_MODEL=gemini-3.8-flash [HINTS=0]
+  const geminiModel = process.env.GEMINI_MODEL;
+  const asr = geminiModel ? geminiAsr(geminiModel) : await WhisperAsr.create(model, 'cpu' as never);
 
   const report: string[] = [];
   const table: Array<Record<string, string | number>> = [];

@@ -5,6 +5,7 @@ import { AssetManager } from '../engine/assets/asset-manager';
 import { DEMO_CATALOG } from '../engine/catalog/demo-catalog';
 import { EngineCore } from '../engine/core';
 import { FixtureAsr, FixtureTranslator } from '../engine/fixtures/fixture-providers';
+import { OnlineAssets } from '../engine/online/online-providers';
 import type { WorkerCommand, WorkerInit, WorkerReply } from '../engine/worker-protocol';
 
 /**
@@ -27,7 +28,14 @@ async function init(msg: WorkerInit): Promise<EngineCore> {
   const repo = await TaskLogRepository.open(o.dbName ?? 'marinear');
   const c = o.fixtureMode
     ? new EngineCore({ repo, catalog: DEMO_CATALOG, asr: new FixtureAsr(), translator: new FixtureTranslator(), fixtureMode: true })
-    : new EngineCore({
+    : o.mode === 'online'
+      ? new EngineCore({
+          repo,
+          catalog: DEMO_CATALOG,
+          mode: 'online',
+          assets: new OnlineAssets((o.proxyUrl ?? 'http://localhost:8787').replace(/\/$/, ''), DEMO_CATALOG.terminals.map((t) => t.terminalId)),
+        })
+      : new EngineCore({
         repo,
         catalog: DEMO_CATALOG,
         assets: new AssetManager({
