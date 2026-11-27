@@ -157,7 +157,8 @@ export function extractCandidates(
     [/(?<!\d)(\d{1,2})\s*번?\s*선석/gu, (m) => Number(m[1])],
     // 무전에서는 한자어 수사로 읽는다: "이번 선석"=2번, "삼번 선석"=3번 ("이번"은 '선석'이 바로 뒤에 올 때만)
     [/(?<![가-힣])(일|이|삼|사|오|육|칠|팔|구)\s*번\s*선석/gu, (m) => '일이삼사오육칠팔구'.indexOf(m[1]!) + 1],
-    [/\bberth\s*(one|two|three|four|five|\d)\b/giu, (m) => (['one', 'two', 'three', 'four', 'five'].indexOf(m[1]!.toLowerCase()) + 1) || Number(m[1])],
+    // Whisper 가 영어 교신의 berth 를 "birth" 로 적는 경우가 실측에서 나옴
+    [/\b(?:berth|birth)\s*(one|two|three|four|five|\d)\b/giu, (m) => (['one', 'two', 'three', 'four', 'five'].indexOf(m[1]!.toLowerCase()) + 1) || Number(m[1])],
   ];
   // 터미널 약어 바로 뒤에 붙은 T+숫자 ("HP NTT 3" → HPNT + T3)
   for (const h of hits.filter((x) => x.field === 'terminal')) {

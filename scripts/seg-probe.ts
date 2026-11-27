@@ -2,12 +2,7 @@ import fs from 'node:fs';
 import { decodeWav, rms } from '../src/engine/audio/dsp';
 import { Segmenter, type SegmenterOptions } from '../src/engine/audio/segmenter';
 const files = process.argv.slice(2);
-const configs: Array<[string, Partial<SegmenterOptions>]> = [
-  ['현재', {}],
-  ['off2.5', { offRatio: 2.5 }],
-  ['off2.5+hang500', { offRatio: 2.5, hangoverMs: 500 }],
-  ['on4+off3', { onRatio: 4, offRatio: 3 }],
-];
+const configs: Array<[string, Partial<SegmenterOptions>]> = [['기본값', {}]];
 for (const f of files) {
   const b = fs.readFileSync(f); const { pcm, sampleRate: sr } = decodeWav(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
   // 100ms 단위 rms 윤곽 (dB)

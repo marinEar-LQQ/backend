@@ -56,35 +56,23 @@ export const DEMO_SCENARIO: DemoLine[] = [
 ];
 
 /**
- * 팀 녹음 파일(fixtures/audio/team/scriptN_noisy.wav)을 시연 모드로 분석할 때 쓰는 발화별 대본.
- * 현재 VAD 설정(offRatio 2.5, hangover 500ms)으로 잘린 구간 순서에 맞췄다. 구간 수가 달라지면 남는 구간은 빈 자막.
+ * 녹음 파일을 시연 모드로 분석할 때 쓰는 발화별 대본 (파일명에 키가 들어 있으면 사용, 위에서부터 먼저 일치).
+ * 현재 VAD 기본값(offRatio 2.5, hangover 1000ms, 최대 28s)으로 잘린 구간 순서에 맞췄다. 구간 수가 다르면 남는 구간은 빈 자막.
+ *  - demo-scriptN: fixtures/audio/demo (약한 잡음, 시연 권장)
+ *  - scriptN: fixtures/audio/team (팀 원본, 강한 합성 잡음)
  */
 export const TEAM_AUDIO_SCRIPT: Record<string, Array<{ enhanced: string; raw?: string }>> = {
+  'demo-script1': [{ enhanced: "부산항 관제, 부산항 관제, 여기는 현대부산호, 호출부호 6KLM. 현재 가덕수로 통과 중이며 차항지 HPNT 이번 선석 접안 예정입니다. 침로 삼이공도, 속력 일일 노트입니다. 오바." }, { enhanced: "현대부산호, 여기는 부산항 VTS." }, { enhanced: "현대부산호, 현재 PNIT 일번 선석에서 출항 중인 외항선 있으니 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오. HPNT 접안 예정 시각 일사시 삼십분 확인되었습니다. 이상." }, { enhanced: "수신 양호. 속력 팔 노트로 감속 후 PNIT 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상.", raw: "수신 양호. 속력 팔 노트로 감속 후 TNIC 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상." }],
+  'demo-script2': [{ enhanced: "Busan VTS, Busan VTS, this is Hanjin Ocean, call sign D7AB. Approaching Gadeok channel, destination PNC berth three, course zero-one-five, speed ten knots. Over." }, { enhanced: "한진오션호, 여기는 부산항 VTS." }, { enhanced: "한진오션호, 현재 HJNC 전방 해역에 준설 작업선 작업 중이니 우현으로 여유 있게 우회하시고, PNC 삼번 선석 도선사 승선 지점까지 이동하십시오. 이상." }, { enhanced: "Roger, keeping clear to starboard of HJNC area, proceeding to pilot station for PNC berth three. Hanjin Ocean out." }],
+  'demo-script3': [{ enhanced: "아, 제205동해호에서 제108한성호 감도 있나? 부산남항 남외항 해역이다. 오바." }, { enhanced: "여기는 제108한성호. 감도 양호하다. 현재 북위 삼오도 영삼분, 동경 일이구도 일일분 지점에 고등어 어군 크게 잡혔다. 침로 이일오도, 속력 칠 노트로 이동 중이다. 오바." }, { enhanced: "확인했다. 한성호는 우현으로 크게 돌아서 어군 막아주고, 제302운반선은 본선 좌현 백 미터 거리 유지하면서 부산공동어시장 입항 대기해라. 오바." }],
   script1: [
-    { enhanced: '부산항 관제, 부산항 관제, 여기는 현대부산호, 호출부호 6KLM. 현재 가덕수로 통과 중이며 차항지 HPNT 이번 선석 접안 예정입니다.' },
-    { enhanced: '현대부산호 침로 삼이공도, 속력 일일 노트입니다.' },
-    { enhanced: '오바.' },
-    { enhanced: '현대부산호, 여기는 부산항 VTS.' },
-    { enhanced: '현대부산호, 현재 PNIT 일번 선석에서 출항 중인 외항선 있으니 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오. HPNT 접안 예정 시각 일사시 삼십분 확인되었습니다. 이상.' },
-    {
-      enhanced: '수신 양호. 속력 팔 노트로 감속 후 PNIT 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상.',
-      raw: '수신 양호. 속력 팔 노트로 감속 후 TNIC 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상.',
-    },
+    { enhanced: "부산항 관제, 부산항 관제, 여기는 현대부산호, 호출부호 6KLM. 현재 가덕수로 통과 중이며 차항지 HPNT 이번 선석 접안 예정입니다." },
+    { enhanced: "현대부산호 침로 삼이공도, 속력 일일 노트입니다." },
+    { enhanced: "오바." },
+    { enhanced: "현대부산호, 여기는 부산항 VTS." },
+    { enhanced: "현대부산호, 현재 PNIT 일번 선석에서 출항 중인 외항선 있으니 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오. HPNT 접안 예정 시각 일사시 삼십분 확인되었습니다. 이상." },
+    { enhanced: "수신 양호. 속력 팔 노트로 감속 후 PNIT 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상.", raw: "수신 양호. 속력 팔 노트로 감속 후 TNIC 출항선 좌현 대 좌현 통과하겠습니다. 현대부산호 이상." },
   ],
-  script2: [
-    { enhanced: 'Busan VTS, Busan VTS, this is Hanjin Ocean, call sign D7AB. Approaching Gadeok channel, destination PNC berth three, course zero-one-five, speed ten knots. Over.' },
-    { enhanced: '한진오션호, 여기는 부산항 VTS.' },
-    { enhanced: '한진오션호, 현재 HJNC 전방 해역에 준설 작업선 작업 중이니 우현으로 여유 있게 우회하시고, PNC 삼번 선석 도선사 승선 지점까지 이동하십시오. 이상.' },
-    { enhanced: 'Roger, keeping clear to starboard of HJNC area, proceeding to pilot station for PNC berth three. Hanjin Ocean out.' },
-  ],
-  script3: [
-    { enhanced: '아, 제205동해호에서 제108한성호 감도 있나?' },
-    { enhanced: '부산남항 남외항 해역이다. 오바.' },
-    { enhanced: '여기는 제108한성호. 감도 양호하다.' },
-    { enhanced: '현재 북위 삼오도 영삼분, 동경 일이구도 일일분 지점에 고등어 어군 크게 잡혔다.' },
-    { enhanced: '침로 이일오도, 속력 칠 노트로 이동 중이다. 오바.' },
-    { enhanced: '확인했다.' },
-    { enhanced: '한성호는 우현으로 크게 돌아서 어군 막아주고, 제302운반선은 본선 좌현 백 미터 거리 유지하면서' },
-    { enhanced: '부산공동어시장 입항 대기해라. 오바.' },
-  ],
+  script2: [{ enhanced: "Busan VTS, Busan VTS, this is Hanjin Ocean, call sign D7AB. Approaching Gadeok channel, destination PNC berth three, course zero-one-five, speed ten knots. Over. 한진오션호, 여기는 부산항 VTS." }, { enhanced: "한진오션호, 현재 HJNC 전방 해역에 준설 작업선 작업 중이니 우현으로 여유 있게 우회하시고, PNC 삼번 선석 도선사 승선 지점까지 이동하십시오. 이상. Roger, keeping clear to starboard of HJNC area, proceeding to pilot station for PNC berth three. Hanjin Ocean out." }],
+  script3: [{ enhanced: "아, 제205동해호에서 제108한성호 감도 있나?" }, { enhanced: "부산남항 남외항 해역이다. 오바." }, { enhanced: "여기는 제108한성호. 감도 양호하다. 현재 북위 삼오도 영삼분, 동경 일이구도 일일분 지점에 고등어 어군 크게 잡혔다. 침로 이일오도, 속력 칠 노트로 이동 중이다. 오바." }, { enhanced: "확인했다. 한성호는 우현으로 크게 돌아서 어군 막아주고, 제302운반선은 본선 좌현 백 미터 거리 유지하면서 부산공동어시장 입항 대기해라. 오바." }],
 };

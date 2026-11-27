@@ -38,6 +38,7 @@ export class FixtureAsr implements AsrProvider {
 
 /** 팀 대본 9개 대사의 시연용 번역 (placeholder 문장 → en/id/vi). id/vi 는 원어민 검수 전. 실제 모델 번역이 아니다. */
 export const FIXTURE_TRANSLATIONS: Record<string, Partial<Record<LangCode, string>>> = {
+  "[1], 현재 [2] 전방 해역에 준설 작업선 작업 중이니 우현으로 여유 있게 우회하시고, [3] [4] 도선사 승선 지점까지 이동하십시오. 이상.": {"en":"[1], a dredger is working in the area ahead of [2]; keep well clear to starboard and proceed to the pilot boarding point for [3] [4]. Out.","id":"[1], kapal keruk sedang bekerja di perairan depan [2]; memutar dengan jarak aman ke kanan dan lanjutkan ke titik naik pandu untuk [3] [4]. Selesai.","vi":"[1], tàu nạo vét đang làm việc ở vùng nước phía trước [2]; hãy đi vòng rộng sang phải và di chuyển đến điểm đón hoa tiêu của [3] [4]. Hết."},
   // 팀 녹음 1 구간별 (TEAM_AUDIO_SCRIPT.script1)
   "부산항 관제, 부산항 관제, 여기는 [1], [2]. 현재 가덕수로 통과 중이며 차항지 [3] [4] 접안 예정입니다.": {"en":"Busan Port Control, Busan Port Control, this is [1], [2]. Now passing Gadeok Channel, next port [3] [4], expecting to berth.","id":"Kontrol Pelabuhan Busan, Kontrol Pelabuhan Busan, di sini [1], [2]. Sedang melewati Alur Gadeok, pelabuhan berikutnya [3] [4], dijadwalkan sandar.","vi":"Điều hành cảng Busan, điều hành cảng Busan, đây là [1], [2]. Đang đi qua luồng Gadeok, cảng đến [3] [4], dự kiến cập cầu."},
   "[1] 침로 삼이공도, 속력 일일 노트입니다.": {"en":"[1]: course 320 degrees, speed 11 knots.","id":"[1]: haluan 320 derajat, kecepatan 11 knot.","vi":"[1]: hướng đi 320 độ, tốc độ 11 hải lý/giờ."},
