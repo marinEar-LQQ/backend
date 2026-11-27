@@ -218,3 +218,56 @@ export class M2M100Translator implements TranslationProvider {
     return out[0]?.translation_text ?? '';
   }
 }
+
+// ───────────────────────── 번역 (Opus-MT 2단계: 한→영→대상) ─────────────────────────
+
+/**
+ * Helsinki-NLP Opus-MT (CC-BY-4.0). 한→인니·베트남 직접 모델이 없어 영어를 거친다.
+ * 실측(2026-11-27): m2m100_418M q8 은 id/my 번역이 사용 불가 수준이라 교체.
+ * 한 문장의 영어 중간 결과는 캐시해서 id/vi 를 연달아 요청해도 한→영은 한 번만 돈다.
+ */
+export class OpusPivotTranslator implements TranslationProvider {
+  private readonly enCache = new Map<string, string>();
+
+  private constructor(
+    private readonly koEn: TranslatePipeline,
+    private readonly enTo: Partial<Record<LangCode, TranslatePipeline>>,
+    readonly modelVersion: string,
+  ) {}
+
+  /** models: role=translation 항목들. langPairs 로 ko→en / en→X 를 구분한다 */
+  static async create(models: ModelManifest[], device: Device, onProgress?: (p: LoadProgress) => void): Promise<OpusPivotTranslator> {
+    const { pipeline } = await loadTransformers();
+    const load = async (m: ModelManifest) =>
+      (await pipeline('translation', m.modelId, {
+        device: device === 'webgpu' ? 'wasm' : device,
+        dtype: 'q8' as never,
+        progress_callback: progressAdapter(m.modelId, onProgress) as never,
+      })) as unknown as TranslatePipeline;
+    const koEnModel = models.find((m) => m.langPairs?.some(([a, b]) => a === 'ko' && b === 'en'));
+    if (!koEnModel) throw new Error('한→영 번역 모델이 manifest 에 없습니다.');
+    const koEn = await load(koEnModel);
+    const enTo: Partial<Record<LangCode, TranslatePipeline>> = {};
+    for (const m of models) {
+      for (const [a, b] of m.langPairs ?? []) if (a === 'en' && b !== 'ko') enTo[b] = await load(m);
+    }
+    return new OpusPivotTranslator(koEn, enTo, models.map((m) => m.modelId.split('/').pop()).join('+'));
+  }
+
+  supports(target: LangCode): boolean {
+    return target === 'en' || target in this.enTo;
+  }
+
+  async translate(text: string, target: LangCode): Promise<string> {
+    let en = this.enCache.get(text);
+    if (en === undefined) {
+      en = (await this.koEn(text, { max_new_tokens: 256 }))[0]?.translation_text ?? '';
+      if (this.enCache.size > 200) this.enCache.clear();
+      this.enCache.set(text, en);
+    }
+    if (target === 'en') return en;
+    const pipe = this.enTo[target];
+    if (!pipe) throw new Error(`지원하지 않는 언어: ${target}`);
+    return (await pipe(en, { max_new_tokens: 256 }))[0]?.translation_text ?? '';
+  }
+}

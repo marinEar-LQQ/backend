@@ -1,10 +1,10 @@
 /**
- * 번역 확인: 대본 문장 → 실제 엔진 경로(분석 → 보호 토큰 → M2M100 → 복원·검증)로 id / my / en 번역.
+ * 번역 확인: 대본 문장 → 실제 엔진 경로(분석 → 보호 토큰 → Opus-MT 한→영→대상 → 복원·검증)로 en / id / vi 번역.
  *   npx vite-node --config vitest.config.ts scripts/eval-translate.ts
  */
 import { DEMO_CATALOG } from '../src/engine/catalog/demo-catalog';
 import { DEFAULT_ASSET_MANIFEST } from '../src/engine/assets/asset-manager';
-import { M2M100Translator } from '../src/engine/models/transformers-providers';
+import { OpusPivotTranslator } from '../src/engine/models/transformers-providers';
 import { analyzeUtterance } from '../src/engine/rules/compare';
 import { buildProtectedSource, restoreTokens } from '../src/engine/translate/protect';
 import type { AnalysisResult, LangCode, TaskVersion, Transcript } from '../src/contracts';
@@ -15,18 +15,18 @@ const SENTENCES: Array<{ enh: string; raw?: string }> = [
   { enh: 'A선박 작업 HPNT T3로 변경입니다.', raw: 'A선박 작업 PNIT T3로 변경입니다.' },
   { enh: '한성호는 우현으로 크게 돌아서 어군 막아주고, 본선 좌현 100미터 거리 유지하면서 대기해라.' },
 ];
-const LANGS: LangCode[] = ['id', 'my', 'en'];
+const LANGS: LangCode[] = ['en', 'id', 'vi'];
 
 const task: TaskVersion = { taskId: 't', version: 1, ownVessel: '해동호', targetVessel: 'A선박', terminalId: 'PNIT', berthId: 'T3', note: '', createdAt: '', sourceReviewEventId: null };
 const tr = (text: string): Transcript => ({ text, segments: [], modelVersion: null, wordAligned: false });
 
 async function main() {
-  const model = DEFAULT_ASSET_MANIFEST.models.find((m) => m.role === 'translation')!;
-  console.error(`모델 로딩: ${model.modelId}`);
+  const models = DEFAULT_ASSET_MANIFEST.models.filter((m) => m.role === 'translation');
+  console.error(`모델 로딩: ${models.map((m) => m.modelId).join(', ')}`);
   const t0 = performance.now();
-  const translator = await M2M100Translator.create(model, 'cpu' as never);
+  const translator = await OpusPivotTranslator.create(models, 'cpu' as never);
   console.error(`로딩 ${((performance.now() - t0) / 1000).toFixed(1)}s`);
-  console.log(`지원 언어: ${LANGS.map((l) => `${l}=${translator.supports(l) ? '예' : '아니오'}`).join(', ')}`);
+  console.log(`지원 언어: ${(['en', 'id', 'vi', 'my'] as LangCode[]).map((l) => `${l}=${translator.supports(l) ? '예' : '아니오'}`).join(', ')}`);
 
   for (const s of SENTENCES) {
     const out = analyzeUtterance({ enhanced: tr(s.enh), raw: tr(s.raw ?? s.enh), crossCheck: 'complete', task, catalog: DEMO_CATALOG });

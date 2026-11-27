@@ -1,14 +1,14 @@
 import { EngineError, type AssetManifest, type AssetStatus, type LoadProgress, type ModelManifest } from '../../contracts';
 import { DEMO_CATALOG } from '../catalog/demo-catalog';
 import type { AsrProvider, AssetLoader, AssetState, TranslationProvider } from '../providers';
-import { M2M100Translator, WhisperAsr, configureRuntime, pickDevice, type Device } from '../models/transformers-providers';
+import { OpusPivotTranslator, WhisperAsr, configureRuntime, pickDevice, type Device } from '../models/transformers-providers';
 
 /**
  * 기본 자원 manifest. 라이선스·용량·입력 규격·지원 언어를 기록한다 (백엔드 01장).
  * sha256 이 null 이면 첫 설치 시 계산한 값을 기록(pin)하고, 이후 불일치하면 MODEL_INTEGRITY.
  */
 export const DEFAULT_ASSET_MANIFEST: AssetManifest = {
-  manifestVersion: '2026.11.27-1',
+  manifestVersion: '2026.11.27-2',
   catalog: DEMO_CATALOG,
   models: [
     {
@@ -22,23 +22,42 @@ export const DEFAULT_ASSET_MANIFEST: AssetManifest = {
       license: 'Apache-2.0 (ONNX export) / MIT (OpenAI Whisper weights)',
       runtimeVersion: '@huggingface/transformers@4.3.2',
     },
+    // 번역: Opus-MT 한→영→(인니·베트남). 미얀마어는 팀 결정으로 제외 (2026-11-27), m2m100 은 품질 미달로 교체
     {
-      modelId: 'Xenova/m2m100_418M',
+      modelId: 'Xenova/opus-mt-ko-en',
       version: 'main',
       sha256: null,
       bytes: null,
       role: 'translation',
       inputSpec: null,
-      languages: ['ko', 'my', 'id', 'en', 'vi', 'fil'],
-      license: 'MIT (facebook/m2m100_418M)',
+      languages: ['ko', 'en'],
+      license: 'CC-BY-4.0 (Helsinki-NLP Opus-MT)',
       runtimeVersion: '@huggingface/transformers@4.3.2',
-      langPairs: [
-        ['ko', 'my'],
-        ['ko', 'id'],
-        ['ko', 'en'],
-        ['ko', 'vi'],
-        ['ko', 'fil'],
-      ],
+      langPairs: [['ko', 'en']],
+    },
+    {
+      modelId: 'Xenova/opus-mt-en-id',
+      version: 'main',
+      sha256: null,
+      bytes: null,
+      role: 'translation',
+      inputSpec: null,
+      languages: ['en', 'id'],
+      license: 'CC-BY-4.0 (Helsinki-NLP Opus-MT)',
+      runtimeVersion: '@huggingface/transformers@4.3.2',
+      langPairs: [['en', 'id']],
+    },
+    {
+      modelId: 'Xenova/opus-mt-en-vi',
+      version: 'main',
+      sha256: null,
+      bytes: null,
+      role: 'translation',
+      inputSpec: null,
+      languages: ['en', 'vi'],
+      license: 'CC-BY-4.0 (Helsinki-NLP Opus-MT)',
+      runtimeVersion: '@huggingface/transformers@4.3.2',
+      langPairs: [['en', 'vi']],
     },
   ],
 };
@@ -113,7 +132,12 @@ export class AssetManager implements AssetLoader {
         if (model.role === 'asr') {
           this.asrProvider = await WhisperAsr.create(model, device, onProgress);
         } else if (model.role === 'translation') {
-          this.translationProvider = await M2M100Translator.create(model, device, onProgress);
+          // 번역 모델들(한→영, 영→인니, 영→베트남)은 하나의 2단계 번역기로 묶어 한 번만 만든다
+          this.translationProvider ??= await OpusPivotTranslator.create(
+            manifest.models.filter((m) => m.role === 'translation'),
+            device,
+            onProgress,
+          );
         } else {
           continue;
         }
