@@ -63,6 +63,7 @@ $('start').onclick = async () => {
     fixtureMode: mode === 'fixture',
     allowRemote: !($('offline') as HTMLInputElement).checked,
     skipTranslation: ($('skipTr') as HTMLInputElement).checked,
+    ...(($('device') as HTMLSelectElement).value ? { device: ($('device') as HTMLSelectElement).value as 'wasm' | 'webgpu' } : {}),
   });
   engine = client;
   client.subscribe(onEvent);

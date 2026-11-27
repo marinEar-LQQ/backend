@@ -24,6 +24,7 @@
     <label><input type="radio" name="mode" value="fixture" /> 시연 고정 데이터</label>
     <label><input type="checkbox" id="offline" /> 원격 모델 다운로드 금지 (오프라인 검증)</label>
     <label><input type="checkbox" id="skipTr" /> 번역 모델 건너뛰기</label>
+    <select id="device"><option value="">장치 자동</option><option value="wasm">WASM (q8)</option><option value="webgpu">WebGPU</option></select>
     <button id="start">엔진 시작 + 자원 준비</button>
     <button id="ready">준비 상태</button>
     <div id="progress"></div>
