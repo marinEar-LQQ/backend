@@ -4,7 +4,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: 'harness',
   publicDir: '../fixtures',
-  server: { port: 5181, strictPort: true },
+  // 모델 다운로드·장시간 분석 중 코드 수정으로 페이지가 새로고침되지 않도록 HMR·감시 끔
+  server: { port: 5181, strictPort: true, hmr: false, watch: null },
   worker: { format: 'es' },
   optimizeDeps: { exclude: ['@huggingface/transformers'] },
 });
