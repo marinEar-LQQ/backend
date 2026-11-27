@@ -22,6 +22,8 @@ function loadEnv(): Record<string, string> {
 
 const env = { ...loadEnv(), ...process.env } as Record<string, string | undefined>;
 const PORT = Number(env.PORT ?? 8787);
+// 로컬은 같은 PC 에서만(127.0.0.1). Render 같은 배포 서버는 HOST=0.0.0.0 으로 외부 요청을 받는다.
+const HOST = env.HOST ?? '127.0.0.1';
 // 받아쓰기: 정확한 flash 를 먼저, 제한 시간 안에 답이 없거나 실패하면 빠른 flash-lite 로.
 // 실측(2026-11-27, 새 녹음 3개, 선박명 힌트): 핵심어 flash 23/23 / lite 21/23, 22초 녹음 처리 flash 9~46s / lite 2s
 const ASR_MODEL = env.ASR_MODEL ?? 'gemini-3.5-flash';
@@ -114,6 +116,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, HOST, () => {
   console.log(`marinEar 중계 서버 http://localhost:${PORT}  (전사 ${env.GEMINI_API_KEY ? ASR_MODEL : '키 없음'} / 번역 ${env.NVIDIA_API_KEY ? MT_MODEL : '키 없음'})`);
 });
