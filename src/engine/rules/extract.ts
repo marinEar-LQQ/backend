@@ -39,11 +39,18 @@ const SINO = '공일이삼사오육칠팔구';
 
 /**
  * 무전식 한 자리씩 읽은 수: "삼이공" → "320", "일일" → "11", "영" = 0
- * 자릿값으로 읽은 수도 받는다: "십이" → "12", "이십" → "20", "이십오" → "25" (실측: flash 가 "십이 노트"로 적음)
+ * 자릿값으로 읽은 수도 받는다: "십이" → "12", "이십오" → "25", "백" → "100", "오백" → "500"
+ * (실측: flash 가 "십이 노트", 원음 인식이 "육십 미터 · 백 미터"로 적음)
  */
 export function sinoDigits(s: string): string | null {
-  const ten = s.match(/^([일이삼사오육칠팔구]?)십([일이삼사오육칠팔구]?)$/u);
-  if (ten) return String((ten[1] ? SINO.indexOf(ten[1]) : 1) * 10 + (ten[2] ? SINO.indexOf(ten[2]) : 0));
+  if (/[십백]/u.test(s)) {
+    const m = s.match(/^(?:([일이삼사오육칠팔구]?)백)?(?:([일이삼사오육칠팔구]?)십)?([일이삼사오육칠팔구]?)$/u);
+    if (!m) return null;
+    const digit = (c: string | undefined) => (c ? SINO.indexOf(c) : 1);
+    const hundreds = s.includes('백') ? digit(m[1]) : 0;
+    const tens = s.includes('십') ? digit(m[2]) : 0;
+    return String(hundreds * 100 + tens * 10 + (m[3] ? SINO.indexOf(m[3]) : 0));
+  }
   let out = '';
   for (const ch of s) {
     const d = ch === '영' ? 0 : SINO.indexOf(ch);
@@ -232,11 +239,13 @@ export function extractCandidates(
   }
 
   // 4) 거리
-  for (const m of text.matchAll(/(\d+(?:\.\d+)?)\s*(해리|마일|미터|킬로미터|킬로|km|m)(?![A-Za-z])/giu)) {
+  // 숫자는 아라비아("60미터") 또는 자릿값 한글("육십 미터", "백 미터", "이 마일")
+  for (const m of text.matchAll(/(\d+(?:\.\d+)?|(?<![가-힣])(?:[일이삼사오육칠팔구]?백)?(?:[일이삼사오육칠팔구]?십)?[일이삼사오육칠팔구]?(?<=[일이삼사오육칠팔구십백]))\s*(해리|마일|미터|킬로미터|킬로|km|m)(?![A-Za-z])/giu)) {
     const start = m.index!;
     const end = start + m[0].length;
     const unit = ({ 해리: 'NM', 마일: 'mile', 미터: 'm', 킬로미터: 'km', 킬로: 'km' } as Record<string, string>)[m[2]!] ?? m[2]!.toLowerCase();
-    if (!overlaps(hits, start, end)) hits.push({ field: 'distance', value: `${m[1]}${unit}`, start, end, method: 'pattern' });
+    const num = /^\d/.test(m[1]!) ? m[1]! : sinoDigits(m[1]!);
+    if (num !== null && !overlaps(hits, start, end)) hits.push({ field: 'distance', value: `${num}${unit}`, start, end, method: 'pattern' });
   }
 
   // 4-b) 속력: "8노트", "속력 팔 노트", "속력 일일 노트"(=11, 무전식 한 자리씩 읽기), "ten knots"
