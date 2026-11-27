@@ -1,0 +1,7 @@
+# 잡음 제거 서버 (server/denoise.py) — CPU 용
+#   py -3.10 -m venv .venv
+#   .venv/Scripts/python -m pip install torch==2.0.1 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu
+#   .venv/Scripts/python -m pip install -r server/requirements.txt
+#   .venv/Scripts/python server/denoise.py      (http://127.0.0.1:8788)
+deepfilternet==0.5.6
+soundfile

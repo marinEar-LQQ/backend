@@ -36,7 +36,20 @@ const ALL: Variant[] = [
   { name: 'dsp', run: (p) => enhanceSpeech(p, 16000) },
   { name: 'rnnoise', run: async (p) => (await rnnoiseDenoise(p, 16000)).pcm },
   ...EXTRA.map(([name, o]): Variant => ({ name, run: (p) => enhanceSpeech(p, 16000, o) })),
+  // DeepFilterNet3 (server/denoise.py, :8788). 숫자 = 최대 감쇄 dB, max = 제한 없음
+  ...(['6', '12', '24', 'max'] as const).map((a): Variant => ({ name: `dfn${a}`, run: (p) => dfnDenoise(p, a === 'max' ? 0 : Number(a)) })),
 ];
+
+async function dfnDenoise(pcm16k: Float32Array, atten: number): Promise<Float32Array> {
+  const res = await fetch(`${process.env.DENOISE_URL ?? 'http://127.0.0.1:8788'}/denoise?atten=${atten}`, {
+    method: 'POST',
+    headers: { 'content-type': 'audio/wav' },
+    body: Buffer.from(encodeWav(pcm16k, 16000)),
+  });
+  if (!res.ok) throw new Error(`denoise ${res.status}: ${await res.text()}`);
+  const buf = await res.arrayBuffer();
+  return decodeWav(buf).pcm;
+}
 const pick = (process.env.VARIANTS ?? 'raw,dsp,rnnoise').split(',');
 const VARIANTS = ALL.filter((v) => pick.includes(v.name));
 

@@ -6,3 +6,5 @@ dist/
 *.onnx
 
 fixtures/audio/*/out/
+.venv/
+__pycache__/
