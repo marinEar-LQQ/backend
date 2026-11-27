@@ -25,6 +25,8 @@ const VESSEL_STOP_NAMES = new Set([
   '다른', '상대', '예인', '그', '이', '저', '일반', '작업', '관련', '외국', '국적', '어', '화물', '여객',
   // 일반 낱말 (상호=서로, 선호, 보호, 구호, 경호, 수호, 비호, 환호, 기호, 괄호, 암호, 애호)
   '상', '선', '보', '구', '경', '수', '환', '괄', '암', '애',
+  // 교신 상투어 (호출부호, 수신 양호)
+  '호출부', '양', '수신양', '감도양',
 ]);
 
 const PARTICLE_AFTER = '(?=$|[\\s,.!?·~]|은|는|이|가|을|를|에|의|로|으로|도|와|과|께|랑|야|님|측)';
@@ -217,12 +219,26 @@ export function extractCandidates(
     }
   }
 
+  // 5-a) 호출부호: "호출부호 6KLM", "call sign D7AB" (영문·숫자 3~7자)
+  for (const m of text.matchAll(/(?:호출부호|call\s*sign)\s*[:,]?\s*([A-Z0-9]{3,7})(?![A-Za-z0-9])/giu)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    if (!overlaps(hits, start, end)) hits.push({ field: 'identifier', value: `CALLSIGN ${m[1]!.toUpperCase()}`, start, end, method: 'pattern' });
+  }
+
   // 5) 식별번호: IMO 7자리, MMSI 9자리
   for (const m of text.matchAll(/IMO[\s\-]*(\d{7})(?!\d)|(?<!\d)(\d{9})(?!\d)/giu)) {
     const start = m.index!;
     const end = start + m[0].length;
     const value = m[1] ? `IMO${m[1]}` : `MMSI${m[2]}`;
     if (!overlaps(hits, start, end)) hits.push({ field: 'identifier', value, start, end, method: 'pattern' });
+  }
+
+  // 6-a) 영어 교신의 자기 호출: "this is Hanjin Ocean"
+  for (const m of text.matchAll(/\bthis is ([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})/gu)) {
+    const start = m.index! + m[0].length - m[1]!.length;
+    const end = m.index! + m[0].length;
+    if (!/^(Busan|VTS|Port)\b/.test(m[1]!) && !overlaps(hits, start, end)) hits.push({ field: 'vessel', value: m[1]!.toUpperCase(), start, end, method: 'pattern' });
   }
 
   // 6) 선박: 알려진 이름(작업 기준) 우선, 그다음 "~호 / ~선박" 패턴

@@ -80,6 +80,7 @@ interface SessionRuntime {
 
 interface Job {
   utterance: Utterance;
+  sessionFile?: string;
   rawPcm: Float32Array;
   sampleRate: number;
   index: number;
@@ -361,7 +362,7 @@ export class EngineCore implements EngineClient {
       this.emitError(new EngineError('QUEUE_OVERFLOW', '처리 대기열이 가득 차 이 발화는 분석하지 못했습니다. 원음은 보존했습니다.', true), { sessionId, utteranceId: utterance.utteranceId });
       return;
     }
-    this.queue.push({ utterance, rawPcm: seg.pcm, sampleRate: seg.sampleRate, index });
+    this.queue.push({ utterance, rawPcm: seg.pcm, sampleRate: seg.sampleRate, index, ...(rt.session.inputInfo.fileName ? { sessionFile: rt.session.inputInfo.fileName } : {}) });
     this.emit('analysis.progress', { stage: 'queued', queueDepth: this.queue.length, utterance }, { sessionId, utteranceId: utterance.utteranceId });
     void this.drain();
   }
@@ -406,7 +407,7 @@ export class EngineCore implements EngineClient {
     if (!asr) throw new EngineError('MODEL_NOT_READY', '음성인식 모델이 없습니다.', true);
     const { utterance } = job;
     const ids = { sessionId: utterance.sessionId, utteranceId: utterance.utteranceId };
-    const ctxBase = { utteranceId: utterance.utteranceId, sessionId: utterance.sessionId, utteranceIndex: job.index, utteranceStartMs: utterance.startMs };
+    const ctxBase = { utteranceId: utterance.utteranceId, sessionId: utterance.sessionId, utteranceIndex: job.index, utteranceStartMs: utterance.startMs, ...(job.sessionFile ? { sessionFile: job.sessionFile } : {}) };
 
     // 1) 리샘플 + 잡음 완화 (완화음은 별도 파생 파일)
     this.progress(job, 'enhancing');

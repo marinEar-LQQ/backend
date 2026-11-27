@@ -48,7 +48,7 @@ export function buildProtectedSource(result: AnalysisResult): ProtectedSource {
     const before = text.slice(cursor, c.span.start);
     const uncertain = uncertainDisplay(result, c);
     // 시간·거리·번호는 번역문에서 언어와 무관하게 읽히도록 정규화 값(14:30, 1.5NM)으로 복원
-    const normalized = c.field === 'time' || c.field === 'distance' || c.field === 'identifier' ? c.value : c.surface;
+    const normalized = c.field === 'time' || c.field === 'distance' || c.field === 'identifier' || c.field === 'berth' ? c.value : c.surface;
     const value = uncertain ?? normalized;
     const ph = placeholder(tokens.length);
     tokens.push({ placeholder: ph, value, field: uncertain ? 'uncertain' : c.field });

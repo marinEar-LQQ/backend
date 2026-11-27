@@ -1,6 +1,6 @@
 import type { LangCode, Transcript } from '../../contracts';
 import type { AsrContext, AsrProvider, TranslationProvider } from '../providers';
-import { DEMO_SCENARIO, type DemoLine } from './demo-scenario';
+import { DEMO_SCENARIO, TEAM_AUDIO_SCRIPT, type DemoLine } from './demo-scenario';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,8 +16,16 @@ export class FixtureAsr implements AsrProvider {
 
   async transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript> {
     if (this.delayMs) await sleep(this.delayMs);
-    const line = this.lines[ctx.utteranceIndex % Math.max(1, this.lines.length)];
-    const text = line ? (ctx.variant === 'raw' ? line.raw : line.enhanced) : '';
+    // 팀 녹음 파일이면 파일별 대본, 아니면 시나리오 순서대로
+    const teamKey = ctx.sessionFile ? Object.keys(TEAM_AUDIO_SCRIPT).find((k) => ctx.sessionFile!.includes(k)) : undefined;
+    let text: string;
+    if (teamKey) {
+      const seg = TEAM_AUDIO_SCRIPT[teamKey]![ctx.utteranceIndex];
+      text = seg ? (ctx.variant === 'raw' ? (seg.raw ?? seg.enhanced) : seg.enhanced) : '';
+    } else {
+      const line = this.lines[ctx.utteranceIndex % Math.max(1, this.lines.length)];
+      text = line ? (ctx.variant === 'raw' ? line.raw : line.enhanced) : '';
+    }
     const endMs = ctx.utteranceStartMs + Math.round((pcm16k.length / 16000) * 1000);
     return {
       text,
@@ -28,45 +36,60 @@ export class FixtureAsr implements AsrProvider {
   }
 }
 
-/** placeholder 가 들어간 시연 문장 → 번역 (en/id/my). 미얀마어·인도네시아어는 원어민 검수 전. */
+/** 팀 대본 9개 대사의 시연용 번역 (placeholder 문장 → en/id/vi). id/vi 는 원어민 검수 전. 실제 모델 번역이 아니다. */
 export const FIXTURE_TRANSLATIONS: Record<string, Partial<Record<LangCode, string>>> = {
-  '[1], [2] 작업 [3] [4]로 변경입니다.': {
-    en: '[1], [2] work changed to [3] [4].',
-    id: '[1], pekerjaan [2] diubah ke [3] [4].',
-    my: '[1]၊ [2] ၏ လုပ်ငန်းကို [3] [4] သို့ ပြောင်းလဲထားသည်။',
+  "부산항 관제, 부산항 관제, 여기는 [1], [2]. 현재 가덕수로 통과 중이며 차항지 [3] [4] 접안 예정입니다. 침로 삼이공도, 속력 일일 노트입니다. 오바.": {
+    "en": "Busan Port Control, Busan Port Control, this is [1], [2]. Now passing Gadeok Channel, next port [3] [4], expecting to berth. Course 320 degrees, speed 11 knots. Over.",
+    "id": "Kontrol Pelabuhan Busan, Kontrol Pelabuhan Busan, di sini [1], [2]. Sedang melewati Alur Gadeok, pelabuhan berikutnya [3] [4], dijadwalkan sandar. Haluan 320 derajat, kecepatan 11 knot. Ganti.",
+    "vi": "Điều hành cảng Busan, điều hành cảng Busan, đây là [1], [2]. Đang đi qua luồng Gadeok, cảng đến [3] [4], dự kiến cập cầu. Hướng đi 320 độ, tốc độ 11 hải lý/giờ. Hết."
   },
-  '[1] 작업 [2] [3]로 변경입니다.': {
-    en: '[1] work changed to [2] [3].',
-    id: 'Pekerjaan [1] diubah ke [2] [3].',
-    my: '[1] ၏ လုပ်ငန်းကို [2] [3] သို့ ပြောင်းလဲထားသည်။',
+  "[1], 여기는 부산항 VTS. 현재 [2] [3]에서 출항 중인 외항선 있으니 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오. [4] 접안 예정 시각 일사시 삼십분 확인되었습니다. 이상.": {
+    "en": "[1], this is Busan Port VTS. An outbound ship is leaving [2] [3]; reduce speed to 8 knots and pass port to port. Your berthing time at [4], 14:30, is confirmed. Out.",
+    "id": "[1], di sini VTS Pelabuhan Busan. Ada kapal yang sedang keluar dari [2] [3]; kurangi kecepatan menjadi 8 knot dan berpapasan lambung kiri dengan lambung kiri. Waktu sandar di [4] pukul 14:30 sudah dikonfirmasi. Selesai.",
+    "vi": "[1], đây là VTS cảng Busan. Có tàu đang rời [2] [3]; hãy giảm tốc độ xuống 8 hải lý/giờ và tránh nhau mạn trái với mạn trái. Thời gian cập cầu tại [4] lúc 14:30 đã được xác nhận. Hết."
   },
-  '[1] 작업, [2]로 갑니다.': {
-    en: '[1] work, heading to [2].',
-    id: 'Pekerjaan [1], menuju ke [2].',
-    my: '[1] ၏ လုပ်ငန်း၊ [2] သို့ သွားမည်။',
+  "수신 양호. 속력 팔 노트로 감속 후 [1] 출항선 좌현 대 좌현 통과하겠습니다. [2] 이상.": {
+    "en": "Reading you clearly. Reducing speed to 8 knots, will pass the outbound ship from [1] port to port. [2] out.",
+    "id": "Diterima dengan jelas. Mengurangi kecepatan menjadi 8 knot, akan berpapasan lambung kiri dengan lambung kiri dengan kapal yang keluar dari [1]. [2] selesai.",
+    "vi": "Nghe rõ. Giảm tốc độ xuống 8 hải lý/giờ, sẽ tránh tàu rời [1] mạn trái với mạn trái. [2] hết."
   },
-  '[1], [2] [3]로 이동하세요.': {
-    en: '[1], please move to [2] [3].',
-    id: '[1], silakan pindah ke [2] [3].',
-    my: '[1]၊ [2] [3] သို့ ရွှေ့ပါ။',
+  "Busan VTS, Busan VTS, this is [1], [2]. Approaching Gadeok channel, destination [3] [4], course zero-one-five, speed ten knots. Over.": {
+    "en": "Busan VTS, Busan VTS, this is [1], [2]. Approaching Gadeok channel, destination [3] [4], course 015, speed 10 knots. Over.",
+    "id": "VTS Busan, VTS Busan, di sini [1], [2]. Mendekati Alur Gadeok, tujuan [3] [4], haluan 015, kecepatan 10 knot. Ganti.",
+    "vi": "VTS Busan, VTS Busan, đây là [1], [2]. Đang tiến vào luồng Gadeok, đích đến [3] [4], hướng đi 015, tốc độ 10 hải lý/giờ. Hết."
   },
-  '[1] [2] [3] 접안 예정, [4]입니다.': {
-    en: '[1] is scheduled to berth at [2] [3], at [4].',
-    id: '[1] dijadwalkan sandar di [2] [3], pukul [4].',
-    my: '[1] သည် [2] [3] တွင် [4] ၌ ဆိုက်ကပ်ရန် စီစဉ်ထားသည်။',
+  "[1], 여기는 부산항 VTS. 현재 [2] 전방 해역에 준설 작업선 작업 중이니 우현으로 여유 있게 우회하시고, [3] [4] 도선사 승선 지점까지 이동하십시오. 이상.": {
+    "en": "[1], this is Busan Port VTS. A dredger is working in the area ahead of [2]; keep well clear to starboard and proceed to the pilot boarding point for [3] [4]. Out.",
+    "id": "[1], di sini VTS Pelabuhan Busan. Kapal keruk sedang bekerja di perairan depan [2]; memutar dengan jarak aman ke kanan dan lanjutkan ke titik naik pandu untuk [3] [4]. Selesai.",
+    "vi": "[1], đây là VTS cảng Busan. Tàu nạo vét đang làm việc ở vùng nước phía trước [2]; hãy đi vòng rộng sang phải và di chuyển đến điểm đón hoa tiêu của [3] [4]. Hết."
   },
-  '[1] [2] 말고 [3] [4]로 정정합니다.': {
-    en: '[1]: correction, not [2] but [3] [4].',
-    id: '[1]: koreksi, bukan [2] melainkan [3] [4].',
-    my: '[1]၊ ပြင်ဆင်ချက် - [2] မဟုတ်ဘဲ [3] [4] ဖြစ်သည်။',
+  "Roger, keeping clear to starboard of [1] area, proceeding to pilot station for [2] [3]. Hanjin Ocean out.": {
+    "en": "Roger, keeping clear to starboard of [1] area, proceeding to pilot station for [2] [3]. Hanjin Ocean out.",
+    "id": "Dimengerti, menjaga jarak ke kanan dari area [1], menuju stasiun pandu untuk [2] [3]. Hanjin Ocean selesai.",
+    "vi": "Đã rõ, giữ khoảng cách bên phải khu vực [1], đang đến trạm hoa tiêu của [2] [3]. Hanjin Ocean hết."
   },
+  "아, [1]에서 [2] 감도 있나? 부산남항 남외항 해역이다. 오바.": {
+    "en": "[1] calling [2], do you read me? We are in the outer harbor of Busan South Port. Over.",
+    "id": "[1] memanggil [2], apakah terdengar? Kami berada di perairan pelabuhan luar Busan Selatan. Ganti.",
+    "vi": "[1] gọi [2], có nghe rõ không? Chúng tôi đang ở vùng ngoài cảng Nam Busan. Hết."
+  },
+  "여기는 [1]. 감도 양호하다. 현재 북위 삼오도 영삼분, 동경 일이구도 일일분 지점에 고등어 어군 크게 잡혔다. 침로 이일오도, 속력 칠 노트로 이동 중이다. 오바.": {
+    "en": "This is [1]. Reading you clearly. A large school of mackerel found at 35°03′N, 129°11′E. Moving on course 215 degrees at 7 knots. Over.",
+    "id": "Di sini [1]. Terdengar jelas. Gerombolan ikan makerel besar ditemukan di 35°03′LU, 129°11′BT. Bergerak dengan haluan 215 derajat, kecepatan 7 knot. Ganti.",
+    "vi": "Đây là [1]. Nghe rõ. Phát hiện đàn cá thu lớn tại 35°03′B, 129°11′Đ. Đang di chuyển hướng 215 độ, tốc độ 7 hải lý/giờ. Hết."
+  },
+  "확인했다. [1]는 우현으로 크게 돌아서 어군 막아주고, 제302운반선은 본선 좌현 백 미터 거리 유지하면서 부산공동어시장 입항 대기해라. 오바.": {
+    "en": "Understood. [1], turn wide to starboard and block the school. Carrier No.302, keep 100 m off our port side and stand by to enter Busan Cooperative Fish Market. Over.",
+    "id": "Dimengerti. [1], putar lebar ke kanan dan halangi gerombolan ikan. Kapal angkut No.302, jaga jarak 100 m di sisi kiri kapal kami dan siaga untuk masuk ke Pasar Ikan Koperasi Busan. Ganti.",
+    "vi": "Đã rõ. [1], quay rộng sang phải để chặn đàn cá. Tàu chở hàng số 302, giữ cách mạn trái tàu chúng ta 100 m và chờ vào Chợ cá Hợp tác Busan. Hết."
+  }
 };
 
 export class FixtureTranslator implements TranslationProvider {
   readonly modelVersion = 'fixture-translation-v1';
   constructor(
     private readonly table = FIXTURE_TRANSLATIONS,
-    private readonly langs: LangCode[] = ['en', 'id', 'my'],
+    private readonly langs: LangCode[] = ['en', 'id', 'vi'],
     private readonly delayMs = 150,
   ) {}
 

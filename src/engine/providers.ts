@@ -9,6 +9,8 @@ export interface AsrContext {
   variant: AudioVariant;
   /** 세그먼트 시간을 세션 기준으로 바꾸기 위한 발화 시작 시각 */
   utteranceStartMs: number;
+  /** 파일 분석이면 파일명 (시연 고정 데이터가 파일별 대본을 고를 때 사용) */
+  sessionFile?: string;
 }
 
 export interface AsrProvider {

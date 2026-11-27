@@ -27,34 +27,50 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
     expect(rev2.every((r) => r.crossCheck === 'complete' && r.origin === 'fixture')).toBe(true);
   });
 
-  it('사례별 최종 판정', async () => {
+  it('팀 대본 9개 대사의 최종 판정', async () => {
     const { latest } = await setup();
-    expect([0, 1, 2, 3, 4, 5].map((i) => latest(i).comparison.kind)).toEqual(['difference', 'ambiguous', 'ambiguous', 'unrelated', 'match', 'match']);
+    expect(DEMO_SCENARIO.map((_, i) => latest(i).comparison.kind)).toEqual([
+      'difference', // 대본1: 기록 PNIT 2번, 교신 HPNT 2번
+      'ambiguous', // 대본1 VTS: PNIT·HPNT 둘 다 언급
+      'ambiguous', // 대본1 응답: 원음 TNIC (오인식 후보)
+      'unrelated', // 대본2: 한진오션호 (영어)
+      'unrelated',
+      'unknown', // 대본2 응답: 자기 호출 없음
+      'unrelated', // 대본3: 어선들
+      'unrelated',
+      'unrelated',
+    ]);
   });
 
-  it('사례 B: rev1(enhanced 만)은 difference 였다가 교차 검사 후 ambiguous 로 바뀐다', async () => {
+  it('원음 오인식(TNIC): rev1(완화음만)은 일치였다가 교차 검사 후 확인 필요로 바뀐다', async () => {
     const { finals } = await setup();
-    const bId = finals.filter((r) => r.revision === 1)[1]!.utteranceId;
-    const [r1, r2] = finals.filter((r) => r.utteranceId === bId);
-    expect(r1!.comparison.kind).toBe('difference');
+    const id = finals.filter((r) => r.revision === 1)[2]!.utteranceId;
+    const [r1, r2] = finals.filter((r) => r.utteranceId === id);
+    expect(r1!.comparison.kind).toBe('match');
     expect(r1!.comparison.reasonCodes).toContain('CROSS_CHECK_PENDING');
     expect(r2!.comparison.kind).toBe('ambiguous');
+    expect(r2!.comparison.reasonCodes).toContain('ASR_CONFUSABLE');
     expect(r2!.entities.terminalId).toBeNull();
   });
 
-  it('번역: 보호 정보 복원, 불확실성 [HPNT / PNIT] 유지, 원문 유지', async () => {
+  it('번역: 시연 번역 + 정형 요약, 불확실성 유지, 미지원 언어는 요약도 없음', async () => {
     const { client, latest } = await setup();
-    const b = latest(1);
-    const id = await client.requestTranslation(b.utteranceId, b.revision, 'id');
+    const c = latest(2);
+    const id = await client.requestTranslation(c.utteranceId, c.revision, 'id');
     expect(id.status).toBe('ready');
-    expect(id.text).toBe('Pekerjaan A선박 diubah ke [HPNT / PNIT] T3.');
-    const ko = await client.requestTranslation(b.utteranceId, b.revision, 'ko');
-    expect(ko.text).toBe('A선박 작업 [HPNT / PNIT] T3로 변경입니다.');
-    const vi = await client.requestTranslation(b.utteranceId, b.revision, 'vi');
-    expect(vi.status).toBe('unavailable');
-    const m = latest(4);
-    const my = await client.requestTranslation(m.utteranceId, m.revision, 'my');
-    expect(my.text).toContain('14:30');
+    expect(id.text).toContain('[PNIT?]');
+    expect(id.summary!.lines.find((l) => l.field === 'terminal')).toMatchObject({ uncertain: true });
+    const ko = await client.requestTranslation(c.utteranceId, c.revision, 'ko');
+    expect(ko.text).toContain('[PNIT?]');
+    const a = latest(0);
+    const en = await client.requestTranslation(a.utteranceId, a.revision, 'en');
+    expect(en.text).toContain('HPNT T2');
+    expect(en.summary!.oneLine).toContain('Speed: 11 knots');
+    const vi = await client.requestTranslation(latest(1).utteranceId, latest(1).revision, 'vi');
+    expect(vi.text).toContain('14:30');
+    const my = await client.requestTranslation(a.utteranceId, a.revision, 'my');
+    expect(my.status).toBe('unavailable');
+    expect(my.summary).toBeNull();
   });
 
   it('apply: 확인 후 새 작업 버전, 반복 apply 는 중복 없음, 오래된 버전은 거절', async () => {
@@ -68,15 +84,14 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
     expect(again.eventId).toBe(ev.eventId);
     expect(events.filter((e) => e.type === 'task.updated')).toHaveLength(2); // 등록 + 반영 1회
 
-    const b = latest(1);
+    const b = latest(2);
     await expect(
       client.reviewUtterance({ requestId: 'req-b', utteranceId: b.utteranceId, action: 'apply', expectedResultRevision: 2, expectedTaskVersion: 1, confirmedByUser: true, patch: { terminalId: 'PNIT' } }),
     ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
 
     const log = await client.getTaskLog(taskId);
     expect(log.versions.map((v) => v.terminalId)).toEqual(['PNIT', 'HPNT']);
-    expect(log.counts).toMatchObject({ utterances: 6, differences: 1, ambiguous: 2, applied: 1, taskChanges: 1 });
-    // 과거 발화의 비교 기준은 v1 그대로
+    expect(log.counts).toMatchObject({ utterances: 9, differences: 1, ambiguous: 2, applied: 1, taskChanges: 1 });
     expect(log.utterances.every((u) => u.utterance.taskVersion === 1)).toBe(true);
   });
 
@@ -91,7 +106,7 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
 
   it('원음/완화음 재생 클립과 일지 내보내기 (음성 미포함, 불확실성 유지)', async () => {
     const { client, taskId, latest } = await setup();
-    const b = latest(1);
+    const b = latest(2);
     const raw = await client.getAudioClip(b.utteranceId, 'raw');
     const enh = await client.getAudioClip(b.utteranceId, 'enhanced');
     expect(raw.status).toBe('available');
@@ -101,7 +116,7 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
     expect(rawRef!.sha256).not.toBe(enhRef!.sha256); // 원음과 완화음은 서로 다른 파일
     const txt = await client.exportTaskLog(taskId, 'txt');
     expect(txt.content).toContain('[시연 고정 데이터]');
-    expect(txt.content).toContain('terminalId=[HPNT / PNIT]');
+    expect(txt.content).toContain('terminalId=[PNIT]');
     const json = JSON.parse((await client.exportTaskLog(taskId, 'json')).content);
     expect(json.includesAudio).toBe(false);
   });
@@ -125,7 +140,7 @@ describe('importTaskLog (미리 분석한 결과 불러오기)', () => {
     const task = await other.importTaskLog(json);
     const log = await other.getTaskLog(task.taskId);
     expect(log.counts.utterances).toBe(DEMO_SCENARIO.length);
-    expect(log.utterances[1]!.results.at(-1)!.comparison.kind).toBe('ambiguous');
+    expect(log.utterances[0]!.results.at(-1)!.comparison.kind).toBe('difference');
     await expect(other.importTaskLog('{"x":1}')).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 });
