@@ -426,24 +426,29 @@ export class EngineCore implements EngineClient {
     // 받아쓰기 힌트: 등록된 내 배·대상 선박 이름 (실측: 선박명 오인식이 가장 많았다 — 한라호→"한라오")
     if (task) Object.assign(ctxBase, { vocabulary: [task.ownVessel, task.targetVessel].filter(Boolean) });
 
-    // 2) enhanced ASR → rev1 (crossCheck=pending)
+    // 2) enhanced ASR → rev1 (crossCheck=pending). 빠른 자막을 지원하면 rev1 은 fast 로 먼저 보여 준다
     this.progress(job, 'asr_enhanced');
-    const enhT = await asr.transcribe(enhanced, { ...ctxBase, variant: 'enhanced' });
+    const fast = asr.supportsFast === true;
+    let enhT = await asr.transcribe(enhanced, { ...ctxBase, variant: 'enhanced', ...(fast ? { quality: 'fast' as const } : {}) });
     this.emit('transcript.partial', { variant: 'enhanced', text: enhT.text }, ids);
     this.progress(job, 'comparing');
     const rev1 = this.buildResult(utterance, task, enhT, null, 'pending', 1, asr.modelVersion);
     await this.saveAndEmit(rev1);
 
-    // 3) raw ASR → 교차 검사 → rev2
+    // 3) raw ASR → 교차 검사 → rev2. 빠른 자막 모드면 완화음도 정확한 모델로 다시 받아써 확정 (원음과 동시에)
     this.progress(job, 'asr_raw');
     let rawT: Transcript | null = null;
     let cross: CrossCheck = 'complete';
+    const accurateEnh = fast
+      ? asr.transcribe(enhanced, { ...ctxBase, variant: 'enhanced', quality: 'accurate' }).catch(() => null) // 실패하면 빠른 자막을 그대로 쓴다
+      : Promise.resolve(null);
     try {
       rawT = await asr.transcribe(pcm16, { ...ctxBase, variant: 'raw' });
     } catch (e) {
       cross = 'unavailable'; // 교차 검사를 끄고 정상 완료로 표시하지 않는다
       this.emitError(new EngineError('INFERENCE_FAILED', `원음 인식 실패로 교차 검사를 하지 못했습니다: ${String((e as Error)?.message ?? e)}`, true), ids);
     }
+    enhT = (await accurateEnh) ?? enhT;
     const rev2 = this.buildResult(utterance, task, enhT, rawT, cross, 2, asr.modelVersion);
     await this.saveAndEmit(rev2);
   }

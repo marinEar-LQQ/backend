@@ -35,6 +35,8 @@ async function post<T>(proxyUrl: string, path: string, body: unknown, timeoutMs:
 
 export class OnlineAsr implements AsrProvider {
   readonly sampleRate = 16000 as const;
+  /** 빠른 자막(lite) 먼저 → 정확한 모델(flash)로 확정. 실측: 22초 발화 lite ~2초 / flash 4~46초 */
+  readonly supportsFast = true;
   modelVersion = 'online-asr';
 
   constructor(
@@ -44,7 +46,7 @@ export class OnlineAsr implements AsrProvider {
   ) {}
 
   async transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript> {
-    const out = await post<{ text: string; model: string }>(this.proxyUrl, '/api/transcribe', { wavBase64: toBase64(encodeWav(pcm16k, 16000)), hints: [...new Set([...(ctx.vocabulary ?? []), ...this.hints])] }, 60000);
+    const out = await post<{ text: string; model: string }>(this.proxyUrl, '/api/transcribe', { wavBase64: toBase64(encodeWav(pcm16k, 16000)), hints: [...new Set([...(ctx.vocabulary ?? []), ...this.hints])], quality: ctx.quality ?? 'accurate' }, 60000);
     this.modelVersion = `online:${out.model}`;
     const text = cleanTranscript(out.text ?? '');
     const endMs = ctx.utteranceStartMs + Math.round((pcm16k.length / 16000) * 1000);

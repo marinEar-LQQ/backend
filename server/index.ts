@@ -80,7 +80,9 @@ const server = http.createServer(async (req, res) => {
       // 무료 등급 한도(429)·과부하·시간 초과에 대비 (실측: 하루 평가 반복으로 flash 한도 소진)
       // "API key not valid" 로 거절된 키는 서버가 떠 있는 동안 다시 쓰지 않는다 (매 요청 헛시도 방지)
       const keys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].filter((k): k is string => !!k && !deadKeys.has(k));
-      const attempts = [ASR_MODEL, ASR_FALLBACK_MODEL].flatMap((model) => keys.map((apiKey, ki) => ({ model, apiKey, ki })));
+      // quality=fast: 먼저 보여 줄 빠른 자막 → 빠른 모델만. 확정용(accurate)은 정확한 모델부터
+      const models = body.quality === 'fast' ? [ASR_FALLBACK_MODEL] : [ASR_MODEL, ASR_FALLBACK_MODEL];
+      const attempts = models.flatMap((model) => keys.map((apiKey, ki) => ({ model, apiKey, ki })));
       let lastErr: unknown = null;
       for (const a of attempts) {
         try {
