@@ -8,3 +8,6 @@ export { analyzeUtterance } from './engine/rules/compare';
 export { extractCandidates } from './engine/rules/extract';
 export { TaskLogRepository } from './repositories/task-log-repository';
 export type { AsrProvider, TranslationProvider, AssetLoader } from './engine/providers';
+export { WorkerEngineClient } from './engine/worker-client';
+export type { WorkerEngineOptions } from './engine/worker-protocol';
+export { AssetManager, DEFAULT_ASSET_MANIFEST, type AssetManagerOptions } from './engine/assets/asset-manager';

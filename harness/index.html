@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>marinEar 엔진 검증</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 16px; max-width: 1100px; }
+    button, select, input { font: inherit; margin: 2px; }
+    fieldset { margin: 8px 0; }
+    #log { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; max-height: 260px; overflow: auto; border: 1px solid #8884; padding: 6px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    td, th { border: 1px solid #8884; padding: 4px; vertical-align: top; }
+    .k-match { color: #1a7f37 } .k-difference { color: #cf222e; font-weight: 600 } .k-ambiguous { color: #9a6700; font-weight: 600 } .k-unrelated, .k-unknown { color: #6e7781 }
+    .badge { font-size: 11px; padding: 1px 5px; border-radius: 4px; background: #8883; }
+  </style>
+</head>
+<body>
+  <h2>marinEar 엔진 검증 하네스 <span class="badge">백엔드 개발용 · 실제 화면 아님</span></h2>
+  <fieldset>
+    <legend>1. 엔진</legend>
+    <label><input type="radio" name="mode" value="model" checked /> 실제 모델 (Worker)</label>
+    <label><input type="radio" name="mode" value="fixture" /> 시연 고정 데이터</label>
+    <label><input type="checkbox" id="offline" /> 원격 모델 다운로드 금지 (오프라인 검증)</label>
+    <label><input type="checkbox" id="skipTr" /> 번역 모델 건너뛰기</label>
+    <button id="start">엔진 시작 + 자원 준비</button>
+    <button id="ready">준비 상태</button>
+    <div id="progress"></div>
+  </fieldset>
+  <fieldset>
+    <legend>2. 작업 · 입력</legend>
+    <button id="seed">시연 작업 등록 (해동호 / A선박 / PNIT T3)</button>
+    <select id="sample">
+      <option value="audio/scenario-radio.wav">scenario-radio.wav (TTS + 합성 잡음)</option>
+      <option value="audio/scenario-clean.wav">scenario-clean.wav (TTS)</option>
+      <option value="audio/radio-case-b.wav">radio-case-b.wav</option>
+      <option value="audio/radio-case-a.wav">radio-case-a.wav</option>
+    </select>
+    <button id="runSample">샘플 분석</button>
+    <input type="file" id="file" accept="audio/*" />
+    <button id="mic">마이크 수신 시작</button>
+    <button id="micStop">수신 중지</button>
+  </fieldset>
+  <fieldset>
+    <legend>3. 결과</legend>
+    <select id="lang"><option>id</option><option>my</option><option>en</option><option>vi</option><option>fil</option><option>ko</option></select>
+    <button id="perf">성능 요약</button>
+    <button id="export">일지 TXT</button>
+    <button id="exportJson">일지 JSON</button>
+    <table><thead><tr><th>#</th><th>rev</th><th>판정</th><th>완화음 / 원음 인식</th><th>불확실</th><th>번역</th><th>재생</th></tr></thead><tbody id="rows"></tbody></table>
+  </fieldset>
+  <pre id="log"></pre>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
