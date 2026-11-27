@@ -71,7 +71,11 @@ $('start').onclick = async () => {
   if (mode === 'fixture') return log(JSON.stringify(await client.checkReadiness()));
   const t0 = performance.now();
   try {
-    const r = await client.loadAssets(DEFAULT_ASSET_MANIFEST, (p) => {
+    const asrModel = ($('asrModel') as HTMLSelectElement).value;
+    const manifest = asrModel
+      ? { ...DEFAULT_ASSET_MANIFEST, models: DEFAULT_ASSET_MANIFEST.models.map((m) => (m.role === 'asr' ? { ...m, modelId: asrModel } : m)) }
+      : DEFAULT_ASSET_MANIFEST;
+    const r = await client.loadAssets(manifest, (p) => {
       $('progress').textContent = `${p.modelId} ${p.status} ${(p.loadedBytes / 1e6).toFixed(1)}MB${p.totalBytes ? ` / ${(p.totalBytes / 1e6).toFixed(1)}MB` : ''}`;
     });
     log(`자원 준비 ${((performance.now() - t0) / 1000).toFixed(1)}s ${JSON.stringify(r)}`);

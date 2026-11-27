@@ -103,7 +103,7 @@ export class AssetManager implements AssetLoader {
 
   async load(manifest: AssetManifest, onProgress?: (p: LoadProgress) => void): Promise<void> {
     await configureRuntime({ allowRemote: this.opts.allowRemote, ...(this.opts.localModelPath ? { localModelPath: this.opts.localModelPath } : {}) });
-    const device = this.opts.device ?? pickDevice();
+    const device = this.opts.device ?? (await pickDevice());
     const failures: string[] = [];
 
     for (const model of manifest.models) {
