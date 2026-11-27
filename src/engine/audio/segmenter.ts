@@ -24,7 +24,7 @@ export const DEFAULT_SEGMENTER: SegmenterOptions = {
   preRollMs: 300,
   hangoverMs: 1000, // 실측 조정 (2026-11-27): 깨끗한 음성은 문장 사이 쉼이 짧아 500ms 면 한 송신이 15조각으로 잘림. 1000ms 는 강제 절단 없음
   maxUtteranceMs: 28000, // Whisper 한 번 처리 한도(30s) 안에서 최대한 한 송신을 유지
-  minSpeechMs: 250,
+  minSpeechMs: 600, // 실측(2026-11-27): 250 이면 말 끝 "이상" 같은 0.4초 꼬리가 따로 잘려 뜻 없는 카드("삼산", "영도")가 됨. 600 은 꼬리만 버리고 나머지 발화는 그대로
   onRatio: 3.0,
   offRatio: 2.5, // 1.8 은 잡음이 계속 깔린 녹음에서 말 끝을 못 찾아 20초 강제 절단됨
   minThreshold: 0.006,
