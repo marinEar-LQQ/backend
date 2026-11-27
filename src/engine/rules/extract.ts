@@ -37,8 +37,13 @@ const CHANGE_KEYWORDS = /변경|바꿔|바꾸|바뀌|바뀝|이동|옮겨|옮기
 
 const SINO = '공일이삼사오육칠팔구';
 
-/** 무전식 한 자리씩 읽은 수: "삼이공" → "320", "일일" → "11", "영" = 0 */
+/**
+ * 무전식 한 자리씩 읽은 수: "삼이공" → "320", "일일" → "11", "영" = 0
+ * 자릿값으로 읽은 수도 받는다: "십이" → "12", "이십" → "20", "이십오" → "25" (실측: flash 가 "십이 노트"로 적음)
+ */
 export function sinoDigits(s: string): string | null {
+  const ten = s.match(/^([일이삼사오육칠팔구]?)십([일이삼사오육칠팔구]?)$/u);
+  if (ten) return String((ten[1] ? SINO.indexOf(ten[1]) : 1) * 10 + (ten[2] ? SINO.indexOf(ten[2]) : 0));
   let out = '';
   for (const ch of s) {
     const d = ch === '영' ? 0 : SINO.indexOf(ch);
@@ -197,15 +202,16 @@ export function extractCandidates(
     }
   }
 
-  // 3-a) 고유어 시각: "세 시", "다섯 시 반", "오후 두 시" (오전/오후 표시가 없으면 12시간제 값 그대로)
+  // 3-a) 고유어 시각: "세 시", "다섯 시 반", "오후 두 시", "오후 두 시 삼십 분" (오전/오후 표시가 없으면 12시간제 값 그대로)
+  //      분이 한글("삼십 분")이면 놓치면 14:30 이 14:00 으로 잘못 나온다 (실측: flash 가 숫자를 한글로 적음)
   const nativeHours: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10, 열한: 11, 열두: 12 };
-  for (const m of text.matchAll(/(오전|오후|새벽|저녁|밤)?\s*(열한|열두|다섯|여섯|일곱|여덟|아홉|한|두|세|네|열)\s*시(?![간작키장도])(?:\s*(반)|\s*(\d{1,2})\s*분)?/gu)) {
+  for (const m of text.matchAll(/(오전|오후|새벽|저녁|밤)?\s*(열한|열두|다섯|여섯|일곱|여덟|아홉|한|두|세|네|열)\s*시(?![간작키장도])(?:\s*(반)|\s*(\d{1,2})\s*분|\s*([일이삼사오육칠팔구십]{1,3})\s*분)?/gu)) {
     const start = m.index! + (m[0].length - m[0].trimStart().length);
     const end = m.index! + m[0].length;
     if (overlaps(hits, start, end)) continue;
     let h = nativeHours[m[2]!]!;
     if ((m[1] === '오후' || m[1] === '저녁' || m[1] === '밤') && h < 12) h += 12;
-    const min = m[3] ? 30 : m[4] ? Number(m[4]) : 0;
+    const min = m[3] ? 30 : m[4] ? Number(m[4]) : m[5] ? Number(sinoDigits(m[5]) ?? 0) : 0;
     hits.push({ field: 'time', value: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`, start, end, method: 'pattern' });
   }
 
@@ -234,7 +240,7 @@ export function extractCandidates(
   }
 
   // 4-b) 속력: "8노트", "속력 팔 노트", "속력 일일 노트"(=11, 무전식 한 자리씩 읽기), "ten knots"
-  for (const m of text.matchAll(/(?:(?:속력|속도)(?:은|는|을|를)?\s*([공영일이삼사오육칠팔구]{1,3})|(\d+(?:\.\d+)?))\s*노트|\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*knots?\b/giu)) {
+  for (const m of text.matchAll(/(?:(?:속력|속도)(?:은|는|을|를)?\s*([공영일이삼사오육칠팔구십]{1,3})|(\d+(?:\.\d+)?))\s*노트|\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*knots?\b/giu)) {
     const start = m.index!;
     const end = start + m[0].length;
     const v = m[1] ? sinoDigits(m[1]) : m[2] ? m[2] : englishNumber(m[3]!);
