@@ -43,9 +43,33 @@ export interface RuntimeOptions {
   localModelPath?: string;
 }
 
+let originalFetch: typeof fetch | null = null;
+
+/**
+ * 오프라인 모드: 외부 주소로 나가는 fetch 를 막는다 (캐시에 있는 모델만 사용).
+ * transformers.js 는 allowRemoteModels=false + allowLocalModels=false 조합을 거부하므로,
+ * 라이브러리 설정은 "원격 허용(캐시 우선)"으로 두고 네트워크 자체를 차단해 실제 인터넷 끊김과 같게 만든다.
+ */
+function setOfflineGuard(on: boolean): void {
+  if (on && !originalFetch) {
+    originalFetch = globalThis.fetch;
+    const own = typeof location !== 'undefined' ? location.origin : null;
+    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const target = new URL(url, own ?? undefined);
+      if (own && target.origin !== own) return Promise.reject(new TypeError(`오프라인 모드: 원격 요청 차단 (${target.host})`));
+      return originalFetch!(input, init);
+    };
+  } else if (!on && originalFetch) {
+    globalThis.fetch = originalFetch;
+    originalFetch = null;
+  }
+}
+
 export async function configureRuntime(opts: RuntimeOptions): Promise<void> {
   const { env } = await loadTransformers();
-  env.allowRemoteModels = opts.allowRemote;
+  env.allowRemoteModels = true;
+  setOfflineGuard(!opts.allowRemote);
   env.useBrowserCache = true;
   if (opts.localModelPath) {
     env.allowLocalModels = true;
@@ -67,7 +91,14 @@ function progressAdapter(modelId: string, onProgress?: (p: LoadProgress) => void
 }
 
 // 무음·잡음에서 Whisper 가 자주 지어내는 문장. 실제 교신으로 보이지 않게 제거한다.
-const HALLUCINATIONS = [/시청(해)?\s*주셔서\s*감사합니다\.?/g, /구독과\s*좋아요[^.]*\.?/g, /MBC\s*뉴스[^.]*\.?/g, /자막\s*제공[^.]*\.?/g];
+const HALLUCINATIONS = [
+  /시청(해)?\s*주셔서\s*감사합니다\.?/g,
+  /구독과\s*좋아요[^.]*\.?/g,
+  /MBC\s*뉴스[^.]*\.?/g,
+  /자막\s*제공[^.]*\.?/g,
+  /thank(s| you)( so much)? for watching[.!]*/gi,
+  /please subscribe[^.!]*[.!]*/gi,
+];
 
 export function cleanTranscript(text: string): string {
   let t = text;
@@ -123,8 +154,11 @@ export class WhisperAsr implements AsrProvider {
     let out = await this.pipe(pcm16k, { ...base, language: 'korean' });
     if (looksTruncated(out.text, seconds)) {
       // 영어 교신(Busan VTS, this is …)은 한국어 강제 시 잘려 나온다 → 언어 자동 감지로 재시도해 더 긴 쪽 채택
-      const auto = await this.pipe(pcm16k, base);
-      if (auto.text.replace(/\s/g, '').length > out.text.replace(/\s/g, '').length * 1.5) out = auto;
+      // 영어로 다시 인식. 환각을 걷어낸 뒤에도 충분히 길고 실제 영어 문장일 때만 채택
+      const en = await this.pipe(pcm16k, { ...base, language: 'english' });
+      const enClean = cleanTranscript(en.text);
+      const latin = (enClean.match(/[A-Za-z]/g) ?? []).length / Math.max(1, enClean.replace(/\s/g, '').length);
+      if (latin > 0.6 && enClean.replace(/\s/g, '').length > cleanTranscript(out.text).replace(/\s/g, '').length * 1.5) out = { ...en, text: enClean };
     }
     const durMs = Math.round(seconds * 1000);
     const chunks = out.chunks?.length ? out.chunks : [{ timestamp: [0, durMs / 1000] as [number, number], text: out.text }];
