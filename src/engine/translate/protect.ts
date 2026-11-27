@@ -24,6 +24,9 @@ function uncertainDisplay(result: AnalysisResult, c: EntityCandidate): string | 
   if (!field) return null;
   const u = result.uncertainties.find((x) => x.field === field);
   if (!u || u.alternatives.length === 0) return null;
+  // 한 문장에 서로 다른 장소가 각각 언급된 경우("HJNC 앞 해역 … PNC 3번 선석")는 들린 그대로 둔다.
+  // [A / B] 는 같은 자리의 값이 엇갈릴 때(원음/완화음 불일치, 정정 불명확)만 쓴다.
+  if (u.reason === 'MULTIPLE_CANDIDATES') return null;
   return u.alternatives.length === 1 ? `[${u.alternatives[0]}?]` : `[${u.alternatives.join(' / ')}]`;
 }
 

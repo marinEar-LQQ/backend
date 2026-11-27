@@ -43,25 +43,28 @@ export interface RuntimeOptions {
   localModelPath?: string;
 }
 
-let originalFetch: typeof fetch | null = null;
+type EnvFetch = (input: string | URL, init?: unknown) => Promise<unknown>;
+let originalFetch: EnvFetch | null = null;
 
 /**
- * 오프라인 모드: 외부 주소로 나가는 fetch 를 막는다 (캐시에 있는 모델만 사용).
+ * 오프라인 모드: 외부 주소로 나가는 요청을 막는다 (캐시에 있는 모델만 사용).
  * transformers.js 는 allowRemoteModels=false + allowLocalModels=false 조합을 거부하므로,
- * 라이브러리 설정은 "원격 허용(캐시 우선)"으로 두고 네트워크 자체를 차단해 실제 인터넷 끊김과 같게 만든다.
+ * 라이브러리 설정은 "원격 허용(캐시 우선)"으로 두고 라이브러리의 env.fetch 를 감싸 실제 인터넷 끊김과 같게 만든다.
+ * (globalThis.fetch 를 바꾸면 안 된다 — 라이브러리가 로드 시점에 fetch 를 잡아 env.fetch 로 쓴다)
  */
-function setOfflineGuard(on: boolean): void {
+function setOfflineGuard(env: { fetch: EnvFetch }, on: boolean): void {
   if (on && !originalFetch) {
-    originalFetch = globalThis.fetch;
+    originalFetch = env.fetch;
     const own = typeof location !== 'undefined' ? location.origin : null;
-    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const target = new URL(url, own ?? undefined);
-      if (own && target.origin !== own) return Promise.reject(new TypeError(`오프라인 모드: 원격 요청 차단 (${target.host})`));
+    env.fetch = (input, init) => {
+      const target = new URL(String(input), own ?? undefined);
+      if (target.protocol.startsWith('http') && (!own || target.origin !== own)) {
+        return Promise.reject(new TypeError(`오프라인 모드: 원격 요청 차단 (${target.host})`));
+      }
       return originalFetch!(input, init);
     };
   } else if (!on && originalFetch) {
-    globalThis.fetch = originalFetch;
+    env.fetch = originalFetch;
     originalFetch = null;
   }
 }
@@ -69,7 +72,7 @@ function setOfflineGuard(on: boolean): void {
 export async function configureRuntime(opts: RuntimeOptions): Promise<void> {
   const { env } = await loadTransformers();
   env.allowRemoteModels = true;
-  setOfflineGuard(!opts.allowRemote);
+  setOfflineGuard(env as unknown as { fetch: EnvFetch }, !opts.allowRemote);
   env.useBrowserCache = true;
   if (opts.localModelPath) {
     env.allowLocalModels = true;

@@ -46,3 +46,22 @@ describe('Whisper 환각 문장 제거', () => {
     expect(cleanTranscript('A선박 PNIT T3 접안')).toBe('A선박 PNIT T3 접안');
   });
 });
+
+import { buildProtectedSource } from '../src/engine/translate/protect';
+import { analyzeUtterance } from '../src/engine/rules/compare';
+import { DEMO_CATALOG } from '../src/engine/catalog/demo-catalog';
+import { TASK_V1, tr as mk } from './helpers';
+import type { AnalysisResult } from '../src/contracts';
+
+describe('보호 원문 표시', () => {
+  const src = (enh: string, raw = enh) => {
+    const o = analyzeUtterance({ enhanced: mk(enh), raw: mk(raw), crossCheck: 'complete', task: TASK_V1, catalog: DEMO_CATALOG });
+    return buildProtectedSource({ ...o, enhancedTranscript: mk(enh), rawTranscript: mk(raw) } as unknown as AnalysisResult);
+  };
+  it('서로 다른 두 장소 언급은 들린 그대로', () => {
+    expect(src('A선박 HJNC 전방 해역 우회, PNC 3번 선석으로').displayText).toBe('A선박 HJNC 전방 해역 우회, PNC 3번 선석으로');
+  });
+  it('원음/완화음이 엇갈린 자리는 [A / B]', () => {
+    expect(src('A선박 HPNT T3', 'A선박 PNIT T3').displayText).toBe('A선박 [HPNT / PNIT] T3');
+  });
+});
