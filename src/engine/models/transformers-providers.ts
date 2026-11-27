@@ -1,0 +1,162 @@
+import type { LangCode, LoadProgress, ModelManifest, Transcript, TranscriptSegment } from '../../contracts';
+import type { AsrContext, AsrProvider, TranslationProvider } from '../providers';
+
+/**
+ * transformers.js (ONNX Runtime Web) 기반 실제 모델 provider.
+ * 라이브러리는 동적 import 로 불러와, Mock 만 쓰는 화면 개발에는 번들되지 않게 한다.
+ * UI 가 모델 라이브러리를 직접 호출하지 않는다 (프론트 01장) — 이 파일은 Worker 안에서만 쓰인다.
+ */
+
+type TF = typeof import('@huggingface/transformers');
+let tfPromise: Promise<TF> | null = null;
+export function loadTransformers(): Promise<TF> {
+  tfPromise ??= import('@huggingface/transformers');
+  return tfPromise;
+}
+
+export type Device = 'webgpu' | 'wasm';
+
+/**
+ * 기본은 WASM. 실측(2026-11-27, RTX 4050 노트북, whisper-small): Chrome WASM 멀티스레드 발화당 9.8s,
+ * Edge WebGPU(fp32 encoder + q4 decoder) 20.5s — WebGPU 가 더 느렸다. WebGPU 는 명시적으로 고를 때만.
+ */
+export async function pickDevice(): Promise<Device> {
+  return 'wasm';
+}
+
+/** navigator.gpu 가 있어도 어댑터가 없을 수 있다 (GPU 차단 기기) — 실제로 요청해 보고 판단 */
+export async function webgpuAvailable(): Promise<Device> {
+  const gpu = typeof navigator !== 'undefined' ? (navigator as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu : undefined;
+  if (!gpu) return 'wasm';
+  try {
+    return (await gpu.requestAdapter()) ? 'webgpu' : 'wasm';
+  } catch {
+    return 'wasm';
+  }
+}
+
+export interface RuntimeOptions {
+  device?: Device;
+  /** false 면 네트워크에서 모델을 받지 않는다 (오프라인 검증) */
+  allowRemote: boolean;
+  /** 자체 호스팅 모델 경로 (예: '/models/'). 지정 시 로컬 경로 우선 */
+  localModelPath?: string;
+}
+
+export async function configureRuntime(opts: RuntimeOptions): Promise<void> {
+  const { env } = await loadTransformers();
+  env.allowRemoteModels = opts.allowRemote;
+  env.useBrowserCache = true;
+  if (opts.localModelPath) {
+    env.allowLocalModels = true;
+    env.localModelPath = opts.localModelPath;
+  } else {
+    env.allowLocalModels = false;
+  }
+}
+
+function progressAdapter(modelId: string, onProgress?: (p: LoadProgress) => void) {
+  const files = new Map<string, { loaded: number; total: number }>();
+  return (info: { status: string; file?: string; loaded?: number; total?: number }) => {
+    if (!onProgress) return;
+    if (info.status === 'progress' && info.file) files.set(info.file, { loaded: info.loaded ?? 0, total: info.total ?? 0 });
+    const loaded = [...files.values()].reduce((n, f) => n + f.loaded, 0);
+    const total = [...files.values()].reduce((n, f) => n + f.total, 0);
+    onProgress({ modelId, loadedBytes: loaded, totalBytes: total || null, status: info.status === 'ready' ? 'ready' : 'downloading' });
+  };
+}
+
+// 무음·잡음에서 Whisper 가 자주 지어내는 문장. 실제 교신으로 보이지 않게 제거한다.
+const HALLUCINATIONS = [/시청(해)?\s*주셔서\s*감사합니다\.?/g, /구독과\s*좋아요[^.]*\.?/g, /MBC\s*뉴스[^.]*\.?/g, /자막\s*제공[^.]*\.?/g];
+
+export function cleanTranscript(text: string): string {
+  let t = text;
+  for (const re of HALLUCINATIONS) t = t.replace(re, '');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+// ───────────────────────── ASR (Whisper) ─────────────────────────
+
+type AsrPipeline = (audio: Float32Array, opts: Record<string, unknown>) => Promise<{ text: string; chunks?: Array<{ timestamp: [number, number | null]; text: string }> }>;
+
+export class WhisperAsr implements AsrProvider {
+  readonly sampleRate = 16000 as const;
+  private constructor(
+    private readonly pipe: AsrPipeline,
+    readonly modelVersion: string,
+  ) {}
+
+  static async create(model: ModelManifest, device: Device, onProgress?: (p: LoadProgress) => void): Promise<WhisperAsr> {
+    const { pipeline } = await loadTransformers();
+    const dtype = device === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : { encoder_model: 'q8', decoder_model_merged: 'q8' };
+    const pipe = (await pipeline('automatic-speech-recognition', model.modelId, {
+      device,
+      dtype: dtype as never,
+      progress_callback: progressAdapter(model.modelId, onProgress) as never,
+    })) as unknown as AsrPipeline;
+    return new WhisperAsr(pipe, `${model.modelId}@${model.version}/${device}`);
+  }
+
+  async transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript> {
+    const out = await this.pipe(pcm16k, {
+      language: 'korean',
+      task: 'transcribe',
+      return_timestamps: true,
+      chunk_length_s: 30,
+    });
+    const durMs = Math.round((pcm16k.length / 16000) * 1000);
+    const chunks = out.chunks?.length ? out.chunks : [{ timestamp: [0, durMs / 1000] as [number, number], text: out.text }];
+    const segments: TranscriptSegment[] = chunks
+      .map((c, i) => ({
+        segmentId: `${ctx.utteranceId}-${ctx.variant}-${i}`,
+        text: cleanTranscript(c.text),
+        startMs: ctx.utteranceStartMs + Math.round((c.timestamp[0] ?? 0) * 1000),
+        endMs: ctx.utteranceStartMs + Math.round((c.timestamp[1] ?? durMs / 1000) * 1000),
+        confidence: null, // Whisper pipeline 은 신뢰도를 주지 않는다 — 임의로 만들지 않음
+      }))
+      .filter((s) => s.text.length > 0);
+    return {
+      text: segments.map((s) => s.text).join(' '),
+      segments,
+      modelVersion: this.modelVersion,
+      wordAligned: false,
+    };
+  }
+}
+
+// ───────────────────────── 번역 (M2M100) ─────────────────────────
+
+/** 공통 언어 코드 → M2M100 코드 (fil 은 tl 로 학습됨) */
+const M2M_CODE: Partial<Record<LangCode, string>> = { ko: 'ko', en: 'en', id: 'id', my: 'my', vi: 'vi', fil: 'tl' };
+
+type TranslatePipeline = (text: string, opts: Record<string, unknown>) => Promise<Array<{ translation_text: string }>>;
+
+export class M2M100Translator implements TranslationProvider {
+  private constructor(
+    private readonly pipe: TranslatePipeline,
+    readonly modelVersion: string,
+    private readonly langs: LangCode[],
+  ) {}
+
+  static async create(model: ModelManifest, device: Device, onProgress?: (p: LoadProgress) => void): Promise<M2M100Translator> {
+    const { pipeline } = await loadTransformers();
+    // 번역은 WASM q8 로 고정 (WebGPU 는 ASR 에 양보)
+    const pipe = (await pipeline('translation', model.modelId, {
+      device: 'wasm',
+      dtype: 'q8' as never,
+      progress_callback: progressAdapter(model.modelId, onProgress) as never,
+    })) as unknown as TranslatePipeline;
+    void device;
+    const langs = model.languages.filter((l) => l !== 'ko' && M2M_CODE[l]);
+    return new M2M100Translator(pipe, `${model.modelId}@${model.version}`, langs);
+  }
+
+  supports(target: LangCode): boolean {
+    return this.langs.includes(target);
+  }
+
+  async translate(text: string, target: LangCode): Promise<string> {
+    const out = await this.pipe(text, { src_lang: 'ko', tgt_lang: M2M_CODE[target], max_new_tokens: 256 });
+    return out[0]?.translation_text ?? '';
+  }
+}
