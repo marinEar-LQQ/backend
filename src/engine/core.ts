@@ -52,6 +52,8 @@ import type { AsrProvider, AssetLoader, TranslationProvider } from './providers'
 import { analyzeUtterance } from './rules/compare';
 import { buildProtectedSource, missingValues, restoreTokens, splitClauses } from './translate/protect';
 import { buildSummary } from './translate/summary';
+import { diffTranscripts } from './rules/diff';
+import { collapseRepeats } from './models/transformers-providers';
 
 export interface EngineCoreDeps {
   repo: TaskLogRepository;
@@ -469,6 +471,7 @@ export class EngineCore implements EngineClient {
       comparison: { ...out.comparison, reasonCodes: reasons },
       uncertainties: out.uncertainties,
       crossCheck,
+      transcriptDiff: raw && enhanced && crossCheck === 'complete' ? diffTranscripts(raw.text, enhanced.text) : null,
       audioFlags: utterance.audioFlags,
       modelVersions: { asr: asrVersion, enhancer: ENHANCER_VERSION },
       catalogVersion: this.deps.catalog.catalogVersion,
@@ -513,7 +516,8 @@ export class EngineCore implements EngineClient {
         try {
           const parts: string[] = [];
           for (const clause of splitClauses(src.displayText)) parts.push(await tr.translate(clause, lang));
-          const text = parts.join(' ').replace(/s+/g, ' ').trim();
+          const joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+          const text = collapseRepeats(joined).text;
           const issues = missingValues(text, src.tokens);
           translation = { ...base2, status: issues.length ? 'needs_check' : 'ready', text, modelVersion: tr.modelVersion, issues, reference: true };
         } catch (e) {

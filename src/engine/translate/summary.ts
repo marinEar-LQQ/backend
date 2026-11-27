@@ -11,10 +11,10 @@ type SummaryLang = 'ko' | 'en' | 'id' | 'vi';
 export const SUMMARY_LANGS: readonly LangCode[] = ['ko', 'en', 'id', 'vi'];
 
 const LABELS: Record<SummaryLang, Record<SummaryLine['field'], string> & { check: string }> = {
-  ko: { vessel: '선박', terminal: '터미널', berth: '선석', speed: '속력', course: '침로', instruction: '지시', check: '확인 필요' },
-  en: { vessel: 'Vessel', terminal: 'Terminal', berth: 'Berth', speed: 'Speed', course: 'Course', instruction: 'Instruction', check: 'check' },
-  id: { vessel: 'Kapal', terminal: 'Terminal', berth: 'Dermaga', speed: 'Kecepatan', course: 'Haluan', instruction: 'Instruksi', check: 'periksa' },
-  vi: { vessel: 'Tàu', terminal: 'Bến cảng', berth: 'Cầu cảng', speed: 'Tốc độ', course: 'Hướng đi', instruction: 'Chỉ thị', check: 'cần kiểm tra' },
+  ko: { vessel: '선박', terminal: '터미널', berth: '선석', time: '시각', speed: '속력', course: '침로', instruction: '지시', check: '확인 필요' },
+  en: { vessel: 'Vessel', terminal: 'Terminal', berth: 'Berth', time: 'Time', speed: 'Speed', course: 'Course', instruction: 'Instruction', check: 'check' },
+  id: { vessel: 'Kapal', terminal: 'Terminal', berth: 'Dermaga', time: 'Waktu', speed: 'Kecepatan', course: 'Haluan', instruction: 'Instruksi', check: 'periksa' },
+  vi: { vessel: 'Tàu', terminal: 'Bến cảng', berth: 'Cầu cảng', time: 'Thời gian', speed: 'Tốc độ', course: 'Hướng đi', instruction: 'Chỉ thị', check: 'cần kiểm tra' },
 };
 
 export const PHRASEBOOK: Record<InstructionCode, Record<SummaryLang, string>> = {
@@ -57,6 +57,7 @@ export function buildSummary(result: AnalysisResult, lang: LangCode): Translatio
   const terminals = [...new Set(result.candidates.filter((c) => c.field === 'terminal' && !c.negated).map((c) => c.value))];
   push('terminal', result.entities.terminalId ?? (terminals.length ? terminals.join(', ') : null), 'terminalId');
   push('berth', result.entities.berthId ? result.entities.berthId.replace(/^T/, '') : null, 'berthId');
+  push('time', result.entities.time, 'time');
   if (result.entities.speed) push('speed', speedText(result.entities.speed, lang as SummaryLang));
   if (result.entities.course) push('course', result.entities.course);
   if (result.entities.instructions.length) {

@@ -174,6 +174,12 @@ export function analyzeUtterance(input: AnalyzeInput): AnalyzeOutput {
   const bare = uniq(sources.flatMap((s) => s.bareNumbers));
   if (bare.length > 0) uncertainties.push({ field: 'number', alternatives: bare, reason: 'NUMBER_TYPE_UNCLEAR' });
 
+  // 시각이 한쪽에서만 들렸거나 서로 다르면 확정하지 않고 후보로 남긴다 ("세 시" vs "대시")
+  const timeVals = uniq(sources.flatMap((s) => finalValues(s, 'time')));
+  if (timeVals.length > 0 && singleOrNull(sources, 'time') === null) {
+    uncertainties.push({ field: 'time', alternatives: timeVals, reason: 'ASR_DISAGREEMENT' });
+  }
+
   const entities: ResolvedEntities = {
     vessel: vessel.value,
     terminalId: terminal.value,

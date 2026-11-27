@@ -75,3 +75,25 @@ describe('참고 번역 절 나누기', () => {
     ]);
   });
 });
+
+import { diffTranscripts } from '../src/engine/rules/diff';
+
+describe('시연 녹음(mono_noisy) 지원', () => {
+  it('고유어 시각 "세 시"', () => {
+    expect(vals('세 시에 교대하고 라면이나 먹어야겠다.', 'time')).toEqual(['03:00']);
+    expect(vals('오후 다섯 시 반 입항', 'time')).toEqual(['17:30']);
+    expect(vals('열 시간 대기', 'time')).toEqual([]);
+  });
+  it('원음/완화음 단어 차이', () => {
+    const d = diffTranscripts('오늘 사람이 많이 보네 대시에 두대하고 라면이나 먹어야겠다', '오늘 바람이 많이 부네. 세 시에 교대하고 라면이나 먹어야겠다.');
+    const changed = d.filter((x) => x.op !== 'same');
+    expect(changed.map((x) => [x.raw, x.enhanced])).toEqual([
+      ['사람이', '바람이'],
+      ['보네', '부네.'],
+      ['대시에', '세'],
+      ['두대하고', '시에'],
+      [null, '교대하고'],
+    ]);
+    expect(d.filter((x) => x.op === 'same').map((x) => x.enhanced)).toEqual(['오늘', '많이', '라면이나', '먹어야겠다.']);
+  });
+});

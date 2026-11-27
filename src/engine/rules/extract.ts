@@ -173,6 +173,18 @@ export function extractCandidates(
     }
   }
 
+  // 3-a) 고유어 시각: "세 시", "다섯 시 반", "오후 두 시" (오전/오후 표시가 없으면 12시간제 값 그대로)
+  const nativeHours: Record<string, number> = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10, 열한: 11, 열두: 12 };
+  for (const m of text.matchAll(/(오전|오후|새벽|저녁|밤)?\s*(열한|열두|다섯|여섯|일곱|여덟|아홉|한|두|세|네|열)\s*시(?![간작키장도])(?:\s*(반)|\s*(\d{1,2})\s*분)?/gu)) {
+    const start = m.index! + (m[0].length - m[0].trimStart().length);
+    const end = m.index! + m[0].length;
+    if (overlaps(hits, start, end)) continue;
+    let h = nativeHours[m[2]!]!;
+    if ((m[1] === '오후' || m[1] === '저녁' || m[1] === '밤') && h < 12) h += 12;
+    const min = m[3] ? 30 : m[4] ? Number(m[4]) : 0;
+    hits.push({ field: 'time', value: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`, start, end, method: 'pattern' });
+  }
+
   // 3) 시간: 오후 2시 30분 / 14:30 / 3시 반
   for (const m of text.matchAll(/(오전|오후)?\s*(\d{1,2})\s*시(?!간)(?:\s*(\d{1,2})\s*분|\s*(반))?/gu)) {
     const start = m.index! + (m[0].length - m[0].trimStart().length);

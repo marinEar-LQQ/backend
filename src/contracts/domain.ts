@@ -246,12 +246,19 @@ export interface Comparison {
 }
 
 export interface Uncertainty {
-  field: 'vessel' | 'terminalId' | 'berthId' | 'number';
+  field: 'vessel' | 'terminalId' | 'berthId' | 'time' | 'number';
   alternatives: string[];
   reason: ReasonCode;
 }
 
 export type CrossCheck = 'pending' | 'complete' | 'unavailable';
+
+/** 원음/완화음 자막 단어 단위 차이. changed/added/removed 는 화면에서 "확인 필요"로 강조 */
+export interface WordDiff {
+  op: 'same' | 'changed' | 'added' | 'removed';
+  raw: string | null;
+  enhanced: string | null;
+}
 
 export interface AnalysisResult {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -270,6 +277,8 @@ export interface AnalysisResult {
   comparison: Comparison;
   uncertainties: Uncertainty[];
   crossCheck: CrossCheck;
+  /** 원음·완화음 둘 다 인식됐을 때만 채워진다 (crossCheck=complete). 순서대로 이어 붙이면 자막 */
+  transcriptDiff: WordDiff[] | null;
   audioFlags: AudioFlag[];
   modelVersions: { asr: string | null; enhancer: string | null };
   catalogVersion: string;
@@ -307,7 +316,7 @@ export interface Translation {
 }
 
 export interface SummaryLine {
-  field: 'vessel' | 'terminal' | 'berth' | 'speed' | 'course' | 'instruction';
+  field: 'vessel' | 'terminal' | 'berth' | 'time' | 'speed' | 'course' | 'instruction';
   label: string;
   value: string;
   /** 불확실한 값이면 true — 확정값처럼 표시하지 말 것 */
