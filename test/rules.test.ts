@@ -15,7 +15,7 @@ const run = (enh: string | null, raw: string | null, opts: { pending?: boolean; 
 
 describe('추출 (EntityResolver)', () => {
   it('터미널 별칭·띄어쓴 약어·한국어 호칭을 같은 ID로 연결', () => {
-    for (const text of ['PNIT T3', 'P N I T 티3', '피엔아이티 3번 선석', 'pnit t-3']) {
+    for (const text of ['PNIT T3', 'P N I T 티3', '피엔아이티 3번 선석', 'pnit t-3', 'PN ITT 3']) {
       const ex = extractCandidates(tr(text), 'enhanced', DEMO_CATALOG);
       expect(ex.candidates.find((c) => c.field === 'terminal')?.value, text).toBe('PNIT');
       expect(ex.candidates.find((c) => c.field === 'berth')?.value, text).toBe('T3');

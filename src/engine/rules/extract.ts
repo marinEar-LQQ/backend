@@ -88,7 +88,8 @@ export function extractCandidates(
     .flatMap((t) => t.aliases.map((a) => ({ alias: a, terminalId: t.terminalId })))
     .sort((a, b) => b.alias.length - a.alias.length);
   for (const { alias, terminalId } of aliasList) {
-    const re = new RegExp(`(?<![A-Za-z])${aliasPattern(alias)}(?![A-Za-z])`, 'giu');
+    // 뒤에 영문이 붙으면 다른 낱말로 보되, "HPNTT 3"처럼 선석 T+숫자가 붙은 경우는 허용 (띄어쓰기 처리일 뿐 발음 보정 아님)
+    const re = new RegExp(`(?<![A-Za-z])${aliasPattern(alias)}(?=$|[^A-Za-z]|[Tt][\\s\\-]*\\d)`, 'giu');
     for (const m of text.matchAll(re)) {
       const start = m.index!;
       const end = start + m[0].length;
@@ -103,6 +104,11 @@ export function extractCandidates(
     [/(?<![A-Za-z0-9가-힣])티[\s\-]*(원|투|쓰리|포|파이브)(?![가-힣])/gu, (m) => berthWords[m[1]!]!],
     [/(?<!\d)(\d{1,2})\s*번?\s*선석/gu, (m) => Number(m[1])],
   ];
+  // 터미널 약어 바로 뒤에 붙은 T+숫자 ("HP NTT 3" → HPNT + T3)
+  for (const h of hits.filter((x) => x.field === 'terminal')) {
+    const m = text.slice(h.end).match(/^[Tt][\s\-]*(\d{1,2})(?!\d)/);
+    if (m) hits.push({ field: 'berth', value: `T${Number(m[1])}`, start: h.end, end: h.end + m[0].length, method: 'pattern' });
+  }
   for (const [re, toNum] of berthPatterns) {
     for (const m of text.matchAll(re)) {
       const start = m.index!;
