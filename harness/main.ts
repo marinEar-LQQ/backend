@@ -153,7 +153,8 @@ $('rows').onclick = async (ev) => {
   if (t.dataset.tr) {
     const lang = ($('lang') as HTMLSelectElement).value as LangCode;
     const tr = await engine.requestTranslation(t.dataset.tr, Number(t.dataset.rev), lang);
-    $(`tr-${t.dataset.tr}`).textContent = `[${tr.status}] ${tr.text ?? ''} ${tr.issues.join(' ')}`;
+    $(`tr-${t.dataset.tr}`).textContent = `${tr.summary ? `■ ${tr.summary.oneLine}
+` : ''}${tr.reference ? '(참고 번역) ' : ''}[${tr.status}] ${tr.text ?? ''}`;
   }
   if (t.dataset.play) {
     const clip = await engine.getAudioClip(t.dataset.play, t.dataset.v as 'raw' | 'enhanced');

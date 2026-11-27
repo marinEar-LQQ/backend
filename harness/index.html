@@ -32,8 +32,11 @@
   </fieldset>
   <fieldset>
     <legend>2. 작업 · 입력</legend>
-    <button id="seed">시연 작업 등록 (해동호 / A선박 / PNIT T3)</button>
+    <button id="seed">시연 작업 등록 (해동호 / 현대부산호 / PNIT 2번)</button>
     <select id="sample">
+      <option value="audio/team/script1_noisy.wav">팀 대본1 (상선, 합성 잡음)</option>
+      <option value="audio/team/script2_noisy.wav">팀 대본2 (영어 섞임)</option>
+      <option value="audio/team/script3_noisy.wav">팀 대본3 (어선)</option>
       <option value="audio/scenario-radio.wav">scenario-radio.wav (TTS + 합성 잡음)</option>
       <option value="audio/scenario-clean.wav">scenario-clean.wav (TTS)</option>
       <option value="audio/radio-case-b.wav">radio-case-b.wav</option>
@@ -46,7 +49,7 @@
   </fieldset>
   <fieldset>
     <legend>3. 결과</legend>
-    <select id="lang"><option>id</option><option>my</option><option>en</option><option>vi</option><option>fil</option><option>ko</option></select>
+    <select id="lang"><option>en</option><option>id</option><option>vi</option><option>ko</option></select>
     <button id="perf">성능 요약</button>
     <button id="export">일지 TXT</button>
     <button id="exportJson">일지 JSON</button>

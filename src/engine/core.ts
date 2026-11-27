@@ -525,7 +525,8 @@ export class EngineCore implements EngineClient {
           const restored = restoreTokens(out, src.tokens);
           translation = { ...base2, status: restored.ok ? 'ready' : 'needs_check', text: restored.text, modelVersion: tr.modelVersion, issues: restored.issues, reference: false };
         } catch (e) {
-          translation = { ...base2, status: 'failed', text: null, modelVersion: tr.modelVersion, issues: [String((e as Error)?.message ?? e)], reference: false };
+          const unavailable = e instanceof EngineError && e.code === 'TRANSLATION_UNAVAILABLE';
+          translation = { ...base2, status: unavailable ? 'unavailable' : 'failed', text: null, modelVersion: tr.modelVersion, issues: [String((e as Error)?.message ?? e)], reference: false };
         }
       }
     }

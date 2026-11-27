@@ -1,4 +1,4 @@
-import type { LangCode, Transcript } from '../../contracts';
+import { EngineError, type LangCode, type Transcript } from '../../contracts';
 import type { AsrContext, AsrProvider, TranslationProvider } from '../providers';
 import { DEMO_SCENARIO, TEAM_AUDIO_SCRIPT, type DemoLine } from './demo-scenario';
 
@@ -38,6 +38,12 @@ export class FixtureAsr implements AsrProvider {
 
 /** 팀 대본 9개 대사의 시연용 번역 (placeholder 문장 → en/id/vi). id/vi 는 원어민 검수 전. 실제 모델 번역이 아니다. */
 export const FIXTURE_TRANSLATIONS: Record<string, Partial<Record<LangCode, string>>> = {
+  // 팀 녹음 1 구간별 (TEAM_AUDIO_SCRIPT.script1)
+  "부산항 관제, 부산항 관제, 여기는 [1], [2]. 현재 가덕수로 통과 중이며 차항지 [3] [4] 접안 예정입니다.": {"en":"Busan Port Control, Busan Port Control, this is [1], [2]. Now passing Gadeok Channel, next port [3] [4], expecting to berth.","id":"Kontrol Pelabuhan Busan, Kontrol Pelabuhan Busan, di sini [1], [2]. Sedang melewati Alur Gadeok, pelabuhan berikutnya [3] [4], dijadwalkan sandar.","vi":"Điều hành cảng Busan, điều hành cảng Busan, đây là [1], [2]. Đang đi qua luồng Gadeok, cảng đến [3] [4], dự kiến cập cầu."},
+  "[1] 침로 삼이공도, 속력 일일 노트입니다.": {"en":"[1]: course 320 degrees, speed 11 knots.","id":"[1]: haluan 320 derajat, kecepatan 11 knot.","vi":"[1]: hướng đi 320 độ, tốc độ 11 hải lý/giờ."},
+  "오바.": {"en":"Over.","id":"Ganti.","vi":"Hết."},
+  "[1], 여기는 부산항 VTS.": {"en":"[1], this is Busan Port VTS.","id":"[1], di sini VTS Pelabuhan Busan.","vi":"[1], đây là VTS cảng Busan."},
+  "[1], 현재 [2] [3]에서 출항 중인 외항선 있으니 속력 팔 노트로 감속하시고 좌현 대 좌현으로 통과하십시오. [4] 접안 예정 시각 일사시 삼십분 확인되었습니다. 이상.": {"en":"[1], an outbound ship is leaving [2] [3]; reduce speed to 8 knots and pass port to port. Your berthing time at [4], 14:30, is confirmed. Out.","id":"[1], ada kapal yang sedang keluar dari [2] [3]; kurangi kecepatan menjadi 8 knot dan berpapasan lambung kiri dengan lambung kiri. Waktu sandar di [4] pukul 14:30 sudah dikonfirmasi. Selesai.","vi":"[1], có tàu đang rời [2] [3]; hãy giảm tốc độ xuống 8 hải lý/giờ và tránh nhau mạn trái với mạn trái. Thời gian cập cầu tại [4] lúc 14:30 đã được xác nhận. Hết."},
   "부산항 관제, 부산항 관제, 여기는 [1], [2]. 현재 가덕수로 통과 중이며 차항지 [3] [4] 접안 예정입니다. 침로 삼이공도, 속력 일일 노트입니다. 오바.": {
     "en": "Busan Port Control, Busan Port Control, this is [1], [2]. Now passing Gadeok Channel, next port [3] [4], expecting to berth. Course 320 degrees, speed 11 knots. Over.",
     "id": "Kontrol Pelabuhan Busan, Kontrol Pelabuhan Busan, di sini [1], [2]. Sedang melewati Alur Gadeok, pelabuhan berikutnya [3] [4], dijadwalkan sandar. Haluan 320 derajat, kecepatan 11 knot. Ganti.",
@@ -100,7 +106,8 @@ export class FixtureTranslator implements TranslationProvider {
   async translate(text: string, target: LangCode): Promise<string> {
     if (this.delayMs) await sleep(this.delayMs);
     const hit = this.table[text]?.[target];
-    if (!hit) throw new Error('시연 번역 데이터에 없는 문장입니다.');
+    // 표에 없는 문장은 "문장 번역 없음"(unavailable) — 정형 요약은 그대로 제공된다
+    if (!hit) throw new EngineError('TRANSLATION_UNAVAILABLE', '시연 번역 데이터에 없는 문장입니다.', true);
     return hit;
   }
 }
