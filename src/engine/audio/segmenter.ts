@@ -22,11 +22,11 @@ export interface SegmenterOptions {
 export const DEFAULT_SEGMENTER: SegmenterOptions = {
   windowMs: 30,
   preRollMs: 300,
-  hangoverMs: 700,
+  hangoverMs: 500, // 팀 잡음 녹음 실측으로 조정 (2026-11-27): 700→500
   maxUtteranceMs: 20000,
   minSpeechMs: 250,
   onRatio: 3.0,
-  offRatio: 1.8,
+  offRatio: 2.5, // 1.8 은 잡음이 계속 깔린 녹음에서 말 끝을 못 찾아 20초 강제 절단됨
   minThreshold: 0.006,
 };
 

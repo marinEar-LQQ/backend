@@ -72,7 +72,26 @@ const HALLUCINATIONS = [/시청(해)?\s*주셔서\s*감사합니다\.?/g, /구�
 export function cleanTranscript(text: string): string {
   let t = text;
   for (const re of HALLUCINATIONS) t = t.replace(re, '');
-  return t.replace(/\s+/g, ' ').trim();
+  return collapseRepeats(t).text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 반복 환각 제거: 같은 구절이 4번 이상 연달아 나오면 한 번만 남기고 표시한다.
+ * ("도시의 도시의 도시의 …" — Whisper 디코더가 반복 루프에 빠진 경우). "부산 VTS, 부산 VTS" 같은 2회 호출은 유지.
+ */
+export function collapseRepeats(text: string): { text: string; collapsed: boolean } {
+  let collapsed = false;
+  const out = text.replace(/(\S.{0,30}?)(?:[\s,.]*\1){3,}/gu, (_m, unit: string) => {
+    collapsed = true;
+    return `${unit} [반복 인식 생략]`;
+  });
+  return { text: out, collapsed };
+}
+
+/** 발화 길이 대비 글자 수가 너무 적으면(영어 교신을 한국어로 강제 인식한 경우 등) 언어 자동 감지로 다시 인식 */
+export function looksTruncated(text: string, seconds: number): boolean {
+  const visible = text.replace(/[\s.,…?!]/g, '').length;
+  return seconds >= 4 && visible < seconds * 2.5;
 }
 
 // ───────────────────────── ASR (Whisper) ─────────────────────────
@@ -98,13 +117,16 @@ export class WhisperAsr implements AsrProvider {
   }
 
   async transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript> {
-    const out = await this.pipe(pcm16k, {
-      language: 'korean',
-      task: 'transcribe',
-      return_timestamps: true,
-      chunk_length_s: 30,
-    });
-    const durMs = Math.round((pcm16k.length / 16000) * 1000);
+    const seconds = pcm16k.length / 16000;
+    // 생성 길이 상한: 반복 루프에 빠져도 발화 길이에 비례한 시간 안에 끝나게 한다
+    const base = { task: 'transcribe', return_timestamps: true, chunk_length_s: 30, max_new_tokens: Math.min(400, Math.ceil(seconds * 20) + 16) };
+    let out = await this.pipe(pcm16k, { ...base, language: 'korean' });
+    if (looksTruncated(out.text, seconds)) {
+      // 영어 교신(Busan VTS, this is …)은 한국어 강제 시 잘려 나온다 → 언어 자동 감지로 재시도해 더 긴 쪽 채택
+      const auto = await this.pipe(pcm16k, base);
+      if (auto.text.replace(/\s/g, '').length > out.text.replace(/\s/g, '').length * 1.5) out = auto;
+    }
+    const durMs = Math.round(seconds * 1000);
     const chunks = out.chunks?.length ? out.chunks : [{ timestamp: [0, durMs / 1000] as [number, number], text: out.text }];
     const segments: TranscriptSegment[] = chunks
       .map((c, i) => ({
@@ -140,13 +162,12 @@ export class M2M100Translator implements TranslationProvider {
 
   static async create(model: ModelManifest, device: Device, onProgress?: (p: LoadProgress) => void): Promise<M2M100Translator> {
     const { pipeline } = await loadTransformers();
-    // 번역은 WASM q8 로 고정 (WebGPU 는 ASR 에 양보)
+    // 번역은 q8 CPU 계열로 고정 (WebGPU 는 쓰지 않음). 브라우저=wasm, Node 평가=cpu
     const pipe = (await pipeline('translation', model.modelId, {
-      device: 'wasm',
+      device: device === 'webgpu' ? 'wasm' : device,
       dtype: 'q8' as never,
       progress_callback: progressAdapter(model.modelId, onProgress) as never,
     })) as unknown as TranslatePipeline;
-    void device;
     const langs = model.languages.filter((l) => l !== 'ko' && M2M_CODE[l]);
     return new M2M100Translator(pipe, `${model.modelId}@${model.version}`, langs);
   }

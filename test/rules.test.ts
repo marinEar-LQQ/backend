@@ -22,6 +22,14 @@ describe('추출 (EntityResolver)', () => {
     }
   });
 
+  it('무전식 수사·영어 선석 표현 ("HPNT 이번 선석", "PNC berth three")', () => {
+    const val = (t: string) => extractCandidates(tr(t), 'enhanced', DEMO_CATALOG).candidates.find((c) => c.field === 'berth')?.value;
+    expect(val('차항지 HPNT 이번 선석 접안 예정')).toBe('T2');
+    expect(val('PNC 삼번 선석 도선사 승선 지점')).toBe('T3');
+    expect(val('destination PNC berth three')).toBe('T3');
+    expect(val('이번 작업은 취소')).toBeUndefined();
+  });
+
   it('근거 없는 숫자는 선석·시간으로 추정하지 않음', () => {
     const ex = extractCandidates(tr('A선박 3으로 가세요'), 'enhanced', DEMO_CATALOG);
     expect(ex.candidates.some((c) => c.field === 'berth' || c.field === 'time')).toBe(false);

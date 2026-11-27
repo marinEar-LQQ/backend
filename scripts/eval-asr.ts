@@ -1,73 +1,87 @@
 /**
  * 잡음 제거 엔진 평가 (백엔드 07장 "잡음 완화: 같은 원음에 대한 핵심 정보 인식 개선/악화").
- * 같은 발화를 원음 / 완화음(설정별)으로 Whisper 인식 → 핵심 정보(선박·터미널·선석) 정답률 비교.
+ * 같은 녹음을 원음 / 우리 DSP / RNNoise 로 각각 처리 → 실제 엔진과 같은 WhisperAsr 로 인식 → 파일 단위 채점.
  *
- *   npx vite-node scripts/eval-asr.ts -- fixtures/audio/team/*.wav
- *   (정답: fixtures/audio/team/truth.json — 없으면 인식 결과만 출력)
+ *   npx vite-node --config vitest.config.ts scripts/eval-asr.ts fixtures/audio/team/*.wav
  *
- * 브라우저와 같은 모델·양자화(q8)를 Node CPU 로 돌린다. 속도 수치는 브라우저와 다르다.
+ * 채점 (정답: 같은 폴더 truth.json)
+ *  - CER: 공백·문장부호 제거 후 글자 오류율 (낮을수록 좋음)
+ *  - 핵심어: 선박명·호출부호·터미널·선석·침로·속력 등 대안 표기 중 하나라도 들어 있으면 적중
+ *  - 터미널/선석: 엔진 추출기(extractCandidates)가 정답 집합과 같은 값을 뽑았는지
+ * 브라우저와 같은 모델·양자화(q8)를 Node CPU 로 돌린다. 인식 시간은 브라우저 수치와 다르다.
  */
-(globalThis as any).WorkerGlobalScope ??= function WorkerGlobalScope() {}; // RNNoise 웹 빌드를 Node 에서 쓰기 위한 우회
+(globalThis as Record<string, unknown>).WorkerGlobalScope ??= function WorkerGlobalScope() {}; // RNNoise 웹 빌드 Node 우회
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEMO_CATALOG } from '../src/engine/catalog/demo-catalog';
+import { DEFAULT_ASSET_MANIFEST } from '../src/engine/assets/asset-manager';
 import { decodeWav, encodeWav, resample } from '../src/engine/audio/dsp';
 import { enhanceSpeech, type EnhanceOptions } from '../src/engine/audio/enhance';
 import { rnnoiseDenoise } from '../src/engine/audio/rnnoise';
 import { Segmenter } from '../src/engine/audio/segmenter';
 import { extractCandidates } from '../src/engine/rules/extract';
-import { cleanTranscript } from '../src/engine/models/transformers-providers';
+import { WhisperAsr } from '../src/engine/models/transformers-providers';
 
 type Variant = { name: string; run: (pcm: Float32Array) => Float32Array | Promise<Float32Array> };
 
-const VARIANTS: Variant[] = [
-  { name: 'raw', run: (p) => p },
-  { name: 'enh-default', run: (p) => enhanceSpeech(p, 16000) },
-  { name: 'rnnoise', run: async (p) => (await rnnoiseDenoise(p, 16000)).pcm },
-  { name: 'rnnoise+band', run: async (p) => enhanceSpeech((await rnnoiseDenoise(p, 16000)).pcm, 16000, { overSubtract: 0, gainFloor: 1 }) },
-  ...(process.env.VARIANTS === 'all'
-    ? ([
-        ['enh-mild', { overSubtract: 1.0, gainFloor: 0.3 }],
-        ['enh-strong', { overSubtract: 2.0, gainFloor: 0.05 }],
-        ['enh-wideband', { lowHz: 150, highHz: 4000 }],
-        ['enh-p10', { noisePercentile: 0.1 }],
-      ] as Array<[string, EnhanceOptions]>).map(([name, o]) => ({ name, run: (p: Float32Array) => enhanceSpeech(p, 16000, o) }))
-    : []),
+const EXTRA: Array<[string, EnhanceOptions]> = [
+  ['dsp-mild', { overSubtract: 1.0, gainFloor: 0.3 }],
+  ['dsp-strong', { overSubtract: 2.0, gainFloor: 0.05 }],
+  ['band-only', { overSubtract: 0, gainFloor: 1 }],
 ];
+const ALL: Variant[] = [
+  { name: 'raw', run: (p) => p },
+  { name: 'dsp', run: (p) => enhanceSpeech(p, 16000) },
+  { name: 'rnnoise', run: async (p) => (await rnnoiseDenoise(p, 16000)).pcm },
+  ...EXTRA.map(([name, o]): Variant => ({ name, run: (p) => enhanceSpeech(p, 16000, o) })),
+];
+const pick = (process.env.VARIANTS ?? 'raw,dsp,rnnoise').split(',');
+const VARIANTS = ALL.filter((v) => pick.includes(v.name));
 
-interface Truth {
-  /** 파일명 → 발화 순서대로 정답 문장 (모르면 null) */
-  [file: string]: Array<string | null>;
+interface FileTruth {
+  text: string;
+  keyterms: string[][];
+  terminals: string[];
+  berths: string[];
 }
 
-function keyInfo(text: string, known: string[]) {
-  const ex = extractCandidates({ text, segments: [], modelVersion: null, wordAligned: false }, 'raw', DEMO_CATALOG, known);
-  const pick = (f: string) => [...new Set(ex.candidates.filter((c) => c.field === f && !c.negated).map((c) => c.value))].sort().join('|');
-  return { vessel: pick('vessel'), terminal: pick('terminal'), berth: pick('berth') };
+const norm = (s: string) => s.toUpperCase().replace(/[\s.,?!…\-'"·:;()[\]]/g, '');
+
+function cer(hyp: string, ref: string): number {
+  const a = Array.from(norm(hyp));
+  const b = Array.from(norm(ref));
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length]! / Math.max(1, b.length);
+}
+
+function extracted(text: string, field: 'terminal' | 'berth'): string[] {
+  const ex = extractCandidates({ text, segments: [], modelVersion: null, wordAligned: false }, 'raw', DEMO_CATALOG);
+  return [...new Set(ex.candidates.filter((c) => c.field === field).map((c) => c.value))].sort();
 }
 
 async function main() {
   const files = process.argv.slice(2).filter((a) => a.endsWith('.wav'));
   if (!files.length) throw new Error('wav 파일을 인자로 주세요');
-  const truthPath = path.join(path.dirname(files[0]!), 'truth.json');
-  const truth: Truth = fs.existsSync(truthPath) ? JSON.parse(fs.readFileSync(truthPath, 'utf8')) : {};
-  const outDir = path.join(path.dirname(files[0]!), 'out');
+  const dir = path.dirname(files[0]!);
+  const truth: Record<string, FileTruth> = JSON.parse(fs.readFileSync(path.join(dir, 'truth.json'), 'utf8'));
+  const outDir = path.join(dir, 'out');
   fs.mkdirSync(outDir, { recursive: true });
 
-  const { pipeline } = await import('@huggingface/transformers');
-  const model = process.env.ASR_MODEL ?? 'onnx-community/whisper-small';
-  console.error(`모델 로딩: ${model}`);
-  const asr = (await pipeline('automatic-speech-recognition', model, { dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' } as never })) as unknown as (
-    a: Float32Array,
-    o: object,
-  ) => Promise<{ text: string }>;
+  const model = { ...DEFAULT_ASSET_MANIFEST.models.find((m) => m.role === 'asr')!, ...(process.env.ASR_MODEL ? { modelId: process.env.ASR_MODEL } : {}) };
+  console.error(`모델 로딩: ${model.modelId}`);
+  const asr = await WhisperAsr.create(model, 'cpu' as never);
 
-  const known = ['해동호', 'A선박', 'B선박'];
-  const score: Record<string, { n: number; vessel: number; terminal: number; berth: number; ms: number }> = {};
-  const rows: string[] = [];
+  const report: string[] = [];
+  const table: Array<Record<string, string | number>> = [];
 
   for (const file of files) {
     const base = path.basename(file);
+    const t = truth[base];
     const buf = fs.readFileSync(file);
     const { pcm, sampleRate } = decodeWav(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
     const seg = new Segmenter();
@@ -77,39 +91,44 @@ async function main() {
       utts.push(...seg.push({ sessionId: 'eval', seq, startMs: Math.round((i / sampleRate) * 1000), sampleRate, channels: 1, pcm: pcm.slice(i, i + step) }).utterances);
     }
     utts.push(...seg.flush());
-    console.error(`${base}: 발화 ${utts.length}개`);
+    report.push(`\n## ${base} — 발화 ${utts.length}개: ${utts.map((u) => `${(u.startMs / 1000).toFixed(1)}–${(u.endMs / 1000).toFixed(1)}s`).join(', ')}`);
 
-    for (const [ui, u] of utts.entries()) {
-      const p16 = resample(u.pcm, u.sampleRate, 16000);
-      const gold = truth[base]?.[ui] ?? null;
-      const goldKey = gold ? keyInfo(gold, known) : null;
-      rows.push(`\n## ${base} #${ui + 1} (${(u.startMs / 1000).toFixed(1)}–${(u.endMs / 1000).toFixed(1)}s)${gold ? `\n정답: ${gold}` : ''}`);
-      for (const v of VARIANTS) {
+    for (const v of VARIANTS) {
+      const texts: string[] = [];
+      let ms = 0;
+      let audioMs = 0;
+      for (const [ui, u] of utts.entries()) {
+        const p16 = resample(u.pcm, u.sampleRate, 16000);
         const audio = await v.run(p16);
-        if (v.name !== 'raw' && ui < 3) fs.writeFileSync(path.join(outDir, `${base.replace('.wav', '')}-${ui + 1}-${v.name}.wav`), Buffer.from(encodeWav(audio, 16000)));
+        if (v.name !== 'raw') fs.writeFileSync(path.join(outDir, `${base.replace('.wav', '')}-${ui + 1}-${v.name}.wav`), Buffer.from(encodeWav(audio, 16000)));
         const t0 = performance.now();
-        const out = await asr(audio, { language: 'korean', task: 'transcribe' });
-        const ms = performance.now() - t0;
-        const text = cleanTranscript(out.text);
-        const k = keyInfo(text, known);
-        const s = (score[v.name] ??= { n: 0, vessel: 0, terminal: 0, berth: 0, ms: 0 });
-        s.ms += ms;
-        let mark = '';
-        if (goldKey) {
-          s.n++;
-          const ok = (f: 'vessel' | 'terminal' | 'berth') => (k[f] === goldKey[f] ? (s[f]++, '✓') : '✗');
-          mark = ` [선박${ok('vessel')} 터미널${ok('terminal')} 선석${ok('berth')}]`;
-        }
-        rows.push(`- ${v.name.padEnd(12)} ${text}${mark}  (${(ms / 1000).toFixed(1)}s)`);
+        const tr = await asr.transcribe(audio, { utteranceId: `u${ui}`, sessionId: 'eval', utteranceIndex: ui, variant: 'raw', utteranceStartMs: u.startMs });
+        ms += performance.now() - t0;
+        audioMs += u.endMs - u.startMs;
+        texts.push(tr.text);
       }
+      const hyp = texts.join(' ');
+      const row: Record<string, string | number> = { file: base, variant: v.name, rtf: +(ms / audioMs).toFixed(2) };
+      if (t) {
+        const hn = norm(hyp);
+        const hits = t.keyterms.filter((alts) => alts.some((a) => hn.includes(norm(a))));
+        const term = extracted(hyp, 'terminal');
+        const berth = extracted(hyp, 'berth');
+        row.cer = +(cer(hyp, t.text) * 100).toFixed(1);
+        row.keyterms = `${hits.length}/${t.keyterms.length}`;
+        row.terminals = `${term.join(',') || '-'} (정답 ${t.terminals.join(',') || '-'})`;
+        row.berths = `${berth.join(',') || '-'} (정답 ${t.berths.join(',') || '-'})`;
+        row.miss = t.keyterms.filter((alts) => !hits.includes(alts)).map((a) => a[0]).join(' ');
+      }
+      table.push(row);
+      report.push(`- [${v.name}] ${hyp}`);
+      console.error(`${base} ${v.name} 완료`);
     }
   }
 
-  console.log(rows.join('\n'));
-  console.log('\n## 요약 (핵심 정보 정답 수 / 정답 있는 발화 수)');
-  for (const [name, s] of Object.entries(score)) {
-    console.log(`${name.padEnd(12)} 선박 ${s.vessel}/${s.n}  터미널 ${s.terminal}/${s.n}  선석 ${s.berth}/${s.n}  인식시간 합 ${(s.ms / 1000).toFixed(1)}s`);
-  }
+  console.log(report.join('\n'));
+  console.log('\n## 요약 (CER 낮을수록, 핵심어 높을수록 좋음)');
+  for (const r of table) console.log(Object.entries(r).map(([k, v]) => `${k}=${v}`).join(' | '));
 }
 
 main().catch((e) => {
