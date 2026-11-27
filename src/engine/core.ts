@@ -640,6 +640,23 @@ export class EngineCore implements EngineClient {
     };
   }
 
+  async importTaskLog(json: string): Promise<Task> {
+    let log: TaskLog;
+    try {
+      log = JSON.parse(json) as TaskLog;
+    } catch {
+      throw new EngineError('VALIDATION_FAILED', '일지 JSON 을 읽을 수 없습니다.', false);
+    }
+    if (!log?.task?.taskId || !Array.isArray(log.versions) || !Array.isArray(log.utterances)) {
+      throw new EngineError('VALIDATION_FAILED', 'marinEar 일지 형식이 아닙니다.', false);
+    }
+    await this.deps.repo.importTaskLog(log);
+    const active = log.versions.find((v) => v.version === log.task.activeVersion);
+    this.activeVersionCache.set(log.task.taskId, log.task.activeVersion);
+    if (active) this.emit('task.updated', { task: log.task, version: active });
+    return log.task;
+  }
+
   async exportTaskLog(taskId: string, format: ExportFormat): Promise<ExportedFile> {
     return exportLog(await this.getTaskLog(taskId), format, this.now());
   }

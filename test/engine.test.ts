@@ -116,3 +116,16 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
     ).rejects.toMatchObject({ code: 'SESSION_CLOSED' });
   });
 });
+
+describe('importTaskLog (미리 분석한 결과 불러오기)', () => {
+  it('내보낸 JSON 을 새 DB 로 가져오면 같은 일지가 보인다', async () => {
+    const { client, taskId } = await setup();
+    const json = (await client.exportTaskLog(taskId, 'json')).content;
+    const other = await MockEngineClient.create({ dbName: `import-${Date.now()}`, asrDelayMs: 0 });
+    const task = await other.importTaskLog(json);
+    const log = await other.getTaskLog(task.taskId);
+    expect(log.counts.utterances).toBe(DEMO_SCENARIO.length);
+    expect(log.utterances[1]!.results.at(-1)!.comparison.kind).toBe('ambiguous');
+    await expect(other.importTaskLog('{"x":1}')).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+});

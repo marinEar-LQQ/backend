@@ -11,6 +11,7 @@ import {
   type TaskVersion,
   type Translation,
   type Utterance,
+  type TaskLog,
 } from '../contracts';
 import { openDatabase, req, transact } from './idb';
 
@@ -259,6 +260,29 @@ export class TaskLogRepository {
   async listReviewEvents(taskId: string): Promise<ReviewEvent[]> {
     const list = await this.byIndex<ReviewEvent>('reviewEvents', 'byTask', taskId);
     return list.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  // ───────── 가져오기 ─────────
+
+  /** exportTaskLog(json) 으로 내보낸 일지를 한 트랜잭션으로 가져온다 (같은 ID 는 덮어씀). 음성 파일은 포함되지 않는다 */
+  async importTaskLog(log: TaskLog): Promise<void> {
+    try {
+      await transact(this.db, ['tasks', 'taskVersions', 'sessions', 'utterances', 'results', 'translations', 'reviewEvents', 'notes'], 'readwrite', async (tx) => {
+        const put = (store: string, v: unknown) => req(tx.objectStore(store).put(v));
+        await put('tasks', log.task);
+        for (const v of log.versions) await put('taskVersions', v);
+        for (const v of log.sessions) await put('sessions', v);
+        for (const e of log.utterances) {
+          await put('utterances', e.utterance);
+          for (const r of e.results) await put('results', r);
+          for (const t of e.translations) await put('translations', t);
+          for (const r of e.reviewEvents) await put('reviewEvents', r);
+        }
+        for (const n of log.notes) await put('notes', n);
+      });
+    } catch (e) {
+      mapStorageError(e);
+    }
   }
 
   // ───────── 메모 ─────────

@@ -118,6 +118,9 @@ export class WorkerEngineClient implements EngineClient {
   exportTaskLog(taskId: string, format: ExportFormat): Promise<ExportedFile> {
     return this.call('exportTaskLog', [taskId, format]);
   }
+  importTaskLog(json: string): Promise<Task> {
+    return this.call('importTaskLog', [json]);
+  }
   saveNote(taskId: string, text: string, noteId?: string): Promise<TaskNote> {
     return this.call('saveNote', [taskId, text, noteId]);
   }

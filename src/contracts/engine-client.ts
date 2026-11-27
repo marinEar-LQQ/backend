@@ -135,5 +135,11 @@ export interface EngineClient {
   saveNote(taskId: string, text: string, noteId?: string): Promise<TaskNote>;
   listTasks(): Promise<Task[]>;
 
+  /**
+   * [확장 · 시연 준비] exportTaskLog(taskId, 'json') 의 content 를 다시 불러온다.
+   * 미리 실제 모델로 분석해 둔 결과를 다른 기기·브라우저에서 보여 줄 때 쓴다 (origin 은 원래 값 유지, 음성은 미포함).
+   */
+  importTaskLog(json: string): Promise<Task>;
+
   subscribe(listener: EngineEventListener): () => void;
 }
