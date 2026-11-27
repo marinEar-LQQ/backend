@@ -29,7 +29,7 @@ function render(): void {
         <td>${i + 1}${r.origin === 'fixture' ? ' <span class=badge>시연</span>' : ''}</td>
         <td>${r.revision} ${r.crossCheck}</td>
         <td class="k-${r.comparison.kind}">${r.comparison.kind}<br><small>${r.comparison.reasonCodes.join(', ')}</small></td>
-        <td>E: ${r.enhancedTranscript?.text ?? '-'}<br>R: ${r.rawTranscript?.text ?? '-'}</td>
+        <td>E: ${r.enhancedTranscript?.text ?? '-'}<br>R: ${r.rawTranscript?.text ?? '-'}${r.transcriptDiff ? `<br><small>차이: ${r.transcriptDiff.filter((d) => d.op !== 'same').map((d) => `${d.raw ?? '∅'}→${d.enhanced ?? '∅'}`).join(', ') || '없음'}</small>` : ''}</td>
         <td>${unc}</td>
         <td><button data-tr="${id}" data-rev="${r.revision}">${lang}</button><div id="tr-${id}"></div></td>
         <td><button data-play="${id}" data-v="raw">원음</button><button data-play="${id}" data-v="enhanced">완화음</button></td>
