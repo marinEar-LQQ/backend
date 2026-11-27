@@ -152,7 +152,13 @@ export type EntityField =
   | 'time'
   | 'distance'
   | 'identifier'
-  | 'changeIntent';
+  | 'changeIntent'
+  /** 속력 (예: 8kn) */
+  | 'speed'
+  /** 침로 (예: 320°) */
+  | 'course'
+  /** 관제 지시어 코드 (InstructionCode) */
+  | 'instruction';
 
 export type TranscriptSource = AudioVariant;
 
@@ -167,7 +173,8 @@ export interface EntityCandidate {
   /** 원문 text 안의 문자 위치 */
   span: { start: number; end: number };
   segmentId: string | null;
-  method: 'catalog-alias' | 'pattern' | 'vessel-name' | 'keyword';
+  /** confusable = 실측에서 자주 틀린 표기로 찾은 후보. 절대 확정하지 않는다 */
+  method: 'catalog-alias' | 'confusable' | 'pattern' | 'vessel-name' | 'keyword';
   /** 정정·부정 문맥 ("HPNT 말고 PNIT" 의 HPNT) 이면 true */
   negated: boolean;
 }
@@ -181,7 +188,24 @@ export interface ResolvedEntities {
   distance: string | null;
   identifier: string | null;
   changeIntent: boolean | null;
+  speed: string | null;
+  course: string | null;
+  /** 들린 지시어 (순서대로, 중복 제거) */
+  instructions: InstructionCode[];
 }
+
+/** 관제 지시어 (IMO 해사 표준 문구 기반 번역에 쓰는 코드) */
+export type InstructionCode =
+  | 'REDUCE_SPEED'
+  | 'PASS_PORT_TO_PORT'
+  | 'PASS_STBD_TO_STBD'
+  | 'KEEP_CLEAR'
+  | 'STAND_BY'
+  | 'BERTH'
+  | 'PROCEED'
+  | 'ALTER_COURSE_STBD'
+  | 'ALTER_COURSE_PORT'
+  | 'CORRECTION';
 
 /** 등록 작업이 없으면 unknown + NO_TASK (비교 불가) */
 export type ComparisonKind = 'match' | 'difference' | 'ambiguous' | 'unrelated' | 'unknown';
@@ -202,7 +226,9 @@ export type ReasonCode =
   | 'LOCATION_MATCHES'
   | 'NO_TASK'
   | 'CROSS_CHECK_PENDING'
-  | 'AUDIO_QUALITY';
+  | 'AUDIO_QUALITY'
+  /** 오인식 후보 사전으로만 찾은 값 (예: '펜트' → HPNT?) */
+  | 'ASR_CONFUSABLE';
 
 export interface FieldDiff {
   field: 'terminalId' | 'berthId';
@@ -274,6 +300,25 @@ export interface Translation {
   /** needs_check / failed 사유 */
   issues: string[];
   createdAt: IsoTime;
+  /** 번역 모델 없이 추출값으로 만든 정형 요약 (정확). 지원하지 않는 언어면 null */
+  summary: TranslationSummary | null;
+  /** true 면 text 는 참고용 기계번역 — 화면에 "참고 번역" 표시 */
+  reference: boolean;
+}
+
+export interface SummaryLine {
+  field: 'vessel' | 'terminal' | 'berth' | 'speed' | 'course' | 'instruction';
+  label: string;
+  value: string;
+  /** 불확실한 값이면 true — 확정값처럼 표시하지 말 것 */
+  uncertain: boolean;
+}
+
+export interface TranslationSummary {
+  lang: LangCode;
+  lines: SummaryLine[];
+  /** 한 줄 요약 (lines 를 이어 붙인 것) */
+  oneLine: string;
 }
 
 // ───────────────────────── 사용자 확인 ─────────────────────────
@@ -352,6 +397,8 @@ export interface TerminalEntry {
   officialName: string;
   displayName: string;
   aliases: string[];
+  /** 실측 오인식 표기. 후보로만 연결하고 확정하지 않는다 (예: HPNT ← 펜트) */
+  confusables?: string[];
   port: string;
   berths: BerthEntry[];
   sourceUrl: string | null;

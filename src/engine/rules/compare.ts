@@ -6,6 +6,7 @@ import type {
   EntityCandidate,
   EntityField,
   FieldDiff,
+  InstructionCode,
   ReasonCode,
   ResolvedEntities,
   TaskVersion,
@@ -78,6 +79,12 @@ function resolveLocationField(sources: ExtractionOutput[], field: 'terminal' | '
   if (present.length !== singles.length || uniq(present).length > 1) {
     return { status: 'uncertain', value: null, alternatives: uniq(present), reason: 'ASR_DISAGREEMENT' };
   }
+  // 어느 한쪽이라도 오인식 후보 사전("펜트"→HPNT)으로만 찾았으면 확정하지 않는다 — 후보로만 보여 주고 사용자가 확인
+  const onlyConfusable = sources.some((s) => {
+    const c = s.candidates.filter((x) => x.field === field && !x.negated);
+    return c.length > 0 && c.every((x) => x.method === 'confusable');
+  });
+  if (onlyConfusable) return { status: 'uncertain', value: null, alternatives: uniq(present), reason: 'ASR_CONFUSABLE' };
   return { status: 'resolved', value: present[0]!, alternatives: [], reason: null };
 }
 
@@ -175,6 +182,12 @@ export function analyzeUtterance(input: AnalyzeInput): AnalyzeOutput {
     distance: singleOrNull(sources, 'distance'),
     identifier: singleOrNull(sources, 'identifier'),
     changeIntent: sources.some((s) => s.candidates.some((c) => c.field === 'changeIntent')) ? true : null,
+    speed: singleOrNull(sources, 'speed'),
+    course: singleOrNull(sources, 'course'),
+    // 지시어는 모든 소스(원음·완화음)에서 들린 것만 — 한쪽에서만 들린 지시는 확정처럼 번역하지 않는다
+    instructions: (sources[0] ? finalValues(sources[0], 'instruction') : []).filter((code) =>
+      sources.every((s) => finalValues(s, 'instruction').includes(code)),
+    ) as InstructionCode[],
   };
 
   let kind: ComparisonKind;
@@ -238,5 +251,5 @@ export function analyzeUtterance(input: AnalyzeInput): AnalyzeOutput {
 }
 
 export function emptyEntities(): ResolvedEntities {
-  return { vessel: null, terminalId: null, berthId: null, time: null, distance: null, identifier: null, changeIntent: null };
+  return { vessel: null, terminalId: null, berthId: null, time: null, distance: null, identifier: null, changeIntent: null, speed: null, course: null, instructions: [] };
 }

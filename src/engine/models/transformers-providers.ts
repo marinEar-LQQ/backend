@@ -227,6 +227,7 @@ export class M2M100Translator implements TranslationProvider {
  * 한 문장의 영어 중간 결과는 캐시해서 id/vi 를 연달아 요청해도 한→영은 한 번만 돈다.
  */
 export class OpusPivotTranslator implements TranslationProvider {
+  readonly mode = 'reference' as const;
   private readonly enCache = new Map<string, string>();
 
   private constructor(

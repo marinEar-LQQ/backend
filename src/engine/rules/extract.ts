@@ -1,4 +1,4 @@
-import type { CatalogManifest, EntityCandidate, EntityField, Transcript, TranscriptSource } from '../../contracts';
+import type { CatalogManifest, EntityCandidate, EntityField, InstructionCode, Transcript, TranscriptSource } from '../../contracts';
 
 /**
  * EntityResolver — 한국어 교신 문장에서 선박·터미널·선석·시간·거리·식별번호·변경 의도 후보를 뽑는다.
@@ -31,6 +31,43 @@ const PARTICLE_AFTER = '(?=$|[\\s,.!?·~]|은|는|이|가|을|를|에|의|로|�
 const CORRECTION_AFTER = /^\s*(?:이|가|은|는)?\s*(?:말고|아니고|아니라|아니야|아닙니다|아님|대신|취소)/;
 const CORRECTION_BETWEEN = /정정|말고|아니고|아니라|대신|취소/;
 const CHANGE_KEYWORDS = /변경|바꿔|바꾸|바뀌|바뀝|이동|옮겨|옮기|대신|말고|정정|아니고|아니라/g;
+
+const SINO = '공일이삼사오육칠팔구';
+
+/** 무전식 한 자리씩 읽은 수: "삼이공" → "320", "일일" → "11", "영" = 0 */
+export function sinoDigits(s: string): string | null {
+  let out = '';
+  for (const ch of s) {
+    const d = ch === '영' ? 0 : SINO.indexOf(ch);
+    if (d < 0) return null;
+    out += String(d);
+  }
+  return out ? String(Number(out)) : null;
+}
+
+const EN_NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+function englishNumber(s: string): string | null {
+  if (/^\d+$/.test(s)) return s;
+  const i = EN_NUM.indexOf(s.toLowerCase());
+  return i >= 0 ? String(i) : null;
+}
+function englishDigits(s: string): string | null {
+  const parts = s.split(/[\s\-]+/).map((p) => (/^\d$/.test(p) ? p : String(EN_NUM.indexOf(p.toLowerCase()))));
+  return parts.some((p) => p === '-1') ? null : parts.join('');
+}
+
+const INSTRUCTION_PATTERNS: Array<[InstructionCode, RegExp]> = [
+  ['REDUCE_SPEED', /감속|속력을?\s*줄|reduce\s+speed|slow\s+down/giu],
+  ['PASS_PORT_TO_PORT', /좌현\s*대\s*좌현|port\s+to\s+port/giu],
+  ['PASS_STBD_TO_STBD', /우현\s*대\s*우현|starboard\s+to\s+starboard/giu],
+  ['KEEP_CLEAR', /우회|피해\s*가|피하|keep(?:ing)?\s+clear/giu],
+  ['STAND_BY', /대기(?:해라|하십시오|하세요|바랍니다|중)|stand\s*by/giu],
+  ['BERTH', /접안|berthing|\bberth\b(?!\s*(?:one|two|three|four|five|\d))/giu],
+  ['PROCEED', /이동하(?:십시오|세요|라)|진입\s*허가|proceed(?:ing)?/giu],
+  ['ALTER_COURSE_STBD', /우현으로\s*(?:크게\s*)?(?:돌|변침|피)/gu],
+  ['ALTER_COURSE_PORT', /좌현으로\s*(?:크게\s*)?(?:돌|변침|피)/gu],
+  ['CORRECTION', /정정합니다|정정,|correction/giu],
+];
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -97,6 +134,19 @@ export function extractCandidates(
     }
   }
 
+  // 1-b) 오인식 후보 사전: 실측에서 자주 틀린 표기("펜트"→HPNT). 후보로만 남기고 compare 에서 확정하지 않는다
+  const confusableList = catalog.terminals
+    .flatMap((t) => (t.confusables ?? []).map((a) => ({ alias: a, terminalId: t.terminalId })))
+    .sort((a, b) => b.alias.length - a.alias.length);
+  for (const { alias, terminalId } of confusableList) {
+    const re = new RegExp(`(?<![A-Za-z가-힣])${aliasPattern(alias)}(?=$|[^A-Za-z]|[Tt][\\s\\-]*\\d)`, 'giu');
+    for (const m of text.matchAll(re)) {
+      const start = m.index!;
+      const end = start + m[0].length;
+      if (!overlaps(hits, start, end)) hits.push({ field: 'terminal', value: terminalId, start, end, method: 'confusable' });
+    }
+  }
+
   // 2) 선석: T3 / 티3 / 티쓰리 / 3번 선석 — 유형 근거가 있는 표현만
   const berthWords: Record<string, number> = { 원: 1, 투: 2, 쓰리: 3, 포: 4, 파이브: 5 };
   const berthPatterns: Array<[RegExp, (m: RegExpMatchArray) => number]> = [
@@ -142,6 +192,29 @@ export function extractCandidates(
     const end = start + m[0].length;
     const unit = ({ 해리: 'NM', 마일: 'mile', 미터: 'm', 킬로미터: 'km', 킬로: 'km' } as Record<string, string>)[m[2]!] ?? m[2]!.toLowerCase();
     if (!overlaps(hits, start, end)) hits.push({ field: 'distance', value: `${m[1]}${unit}`, start, end, method: 'pattern' });
+  }
+
+  // 4-b) 속력: "8노트", "속력 팔 노트", "속력 일일 노트"(=11, 무전식 한 자리씩 읽기), "ten knots"
+  for (const m of text.matchAll(/(?:속력\s*([공영일이삼사오육칠팔구]{1,3})|(\d+(?:\.\d+)?))\s*노트|\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*knots?\b/giu)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    const v = m[1] ? sinoDigits(m[1]) : m[2] ? m[2] : englishNumber(m[3]!);
+    if (v !== null && !overlaps(hits, start, end)) hits.push({ field: 'speed', value: `${v}kn`, start, end, method: 'pattern' });
+  }
+
+  // 4-c) 침로: "침로 삼이공도"(=320°), "침로 215도", "course zero-one-five"
+  for (const m of text.matchAll(/침로\s*([공영일이삼사오육칠팔구]{1,3}|\d{1,3})\s*도|침로\s*(\d{3})(?!\d)|\bcourse\s*((?:zero|one|two|three|four|five|six|seven|eight|nine|\d)(?:[\s\-]+(?:zero|one|two|three|four|five|six|seven|eight|nine|\d)){0,2})\b/giu)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    const v = m[1] ? (/^\d+$/.test(m[1]) ? m[1] : sinoDigits(m[1])) : m[2] ? m[2] : englishDigits(m[3]!);
+    if (v !== null && !overlaps(hits, start, end)) hits.push({ field: 'course', value: `${v.padStart(3, '0')}°`, start, end, method: 'pattern' });
+  }
+
+  // 4-d) 관제 지시어 (IMO 해사 표준 문구로 번역할 코드). 위치가 겹쳐도 허용 — 지시어는 다른 값과 별개로 센다
+  for (const [code, re] of INSTRUCTION_PATTERNS) {
+    for (const m of text.matchAll(re)) {
+      hits.push({ field: 'instruction', value: code, start: m.index!, end: m.index! + m[0].length, method: 'keyword' });
+    }
   }
 
   // 5) 식별번호: IMO 7자리, MMSI 9자리

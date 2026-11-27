@@ -50,7 +50,8 @@ import { Segmenter, type SegmentedUtterance, type SegmenterOptions } from './aud
 import { exportLog } from './export';
 import type { AsrProvider, AssetLoader, TranslationProvider } from './providers';
 import { analyzeUtterance } from './rules/compare';
-import { buildProtectedSource, restoreTokens } from './translate/protect';
+import { buildProtectedSource, missingValues, restoreTokens, splitClauses } from './translate/protect';
+import { buildSummary } from './translate/summary';
 
 export interface EngineCoreDeps {
   repo: TaskLogRepository;
@@ -496,19 +497,34 @@ export class EngineCore implements EngineClient {
     const base = { utteranceId, sourceRevision: revision, targetLang: lang, protectedTokens: src.tokens, createdAt: this.now() };
     let translation: Translation;
 
+    const summary = buildSummary(result, lang);
+    const base2 = { ...base, summary };
+
     if (lang === 'ko') {
-      translation = { ...base, status: 'ready', text: src.displayText, modelVersion: null, issues: [] };
+      translation = { ...base2, status: 'ready', text: src.displayText, modelVersion: null, issues: [], reference: false };
     } else {
       const tr = this.translator;
       if (!tr || !tr.supports(lang)) {
-        translation = { ...base, status: 'unavailable', text: null, modelVersion: tr?.modelVersion ?? null, issues: ['TRANSLATION_UNAVAILABLE'] };
+        // 문장 번역은 없어도 정형 요약(summary)은 그대로 제공된다
+        translation = { ...base2, status: 'unavailable', text: null, modelVersion: tr?.modelVersion ?? null, issues: ['TRANSLATION_UNAVAILABLE'], reference: false };
+      } else if (tr.mode === 'reference') {
+        // 참고용 기계번역: 절 단위로 쪼개 번역 (긴 관제 문장의 뒷부분 누락 방지). 값 보존 여부만 검사하고 "참고" 표시
+        try {
+          const parts: string[] = [];
+          for (const clause of splitClauses(src.displayText)) parts.push(await tr.translate(clause, lang));
+          const text = parts.join(' ').replace(/s+/g, ' ').trim();
+          const issues = missingValues(text, src.tokens);
+          translation = { ...base2, status: issues.length ? 'needs_check' : 'ready', text, modelVersion: tr.modelVersion, issues, reference: true };
+        } catch (e) {
+          translation = { ...base2, status: 'failed', text: null, modelVersion: tr.modelVersion, issues: [String((e as Error)?.message ?? e)], reference: true };
+        }
       } else {
         try {
           const out = await tr.translate(src.protectedText, lang);
           const restored = restoreTokens(out, src.tokens);
-          translation = { ...base, status: restored.ok ? 'ready' : 'needs_check', text: restored.text, modelVersion: tr.modelVersion, issues: restored.issues };
+          translation = { ...base2, status: restored.ok ? 'ready' : 'needs_check', text: restored.text, modelVersion: tr.modelVersion, issues: restored.issues, reference: false };
         } catch (e) {
-          translation = { ...base, status: 'failed', text: null, modelVersion: tr.modelVersion, issues: [String((e as Error)?.message ?? e)] };
+          translation = { ...base2, status: 'failed', text: null, modelVersion: tr.modelVersion, issues: [String((e as Error)?.message ?? e)], reference: false };
         }
       }
     }

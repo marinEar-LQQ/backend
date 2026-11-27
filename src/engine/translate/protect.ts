@@ -84,3 +84,25 @@ export function restoreTokens(translated: string, tokens: ProtectedToken[]): Res
   }
   return { text, ok: issues.length === 0, issues };
 }
+
+/**
+ * 참고 번역용 절 나누기. 작은 MT 모델은 긴 문장의 뒷부분을 버리므로 마침표·쉼표·연결어미 단위로 자른다.
+ * 실측: "…감속하시고 좌현 대 좌현으로 통과하십시오" → "Slow to eight knots and pass port to port."
+ */
+export function splitClauses(text: string): string[] {
+  return text
+    .split(/(?<=[.?!])\s+|(?<=(?:니|며|고)),?\s+(?=[^\s])|,\s+/u)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/** 참고 번역에 보호 값(영문·숫자 코드)이 그대로 남았는지 검사. 한글 선박명은 음역되므로 검사하지 않는다 */
+export function missingValues(translated: string, tokens: ProtectedToken[]): string[] {
+  const up = translated.toUpperCase().replace(/\s+/g, '');
+  const issues: string[] = [];
+  for (const t of tokens) {
+    const codes = (t.value.match(/[A-Za-z]{2,}\d*|\d+/g) ?? []).map((c) => c.toUpperCase());
+    for (const c of codes) if (!up.includes(c)) issues.push(`보호 정보 누락: ${c}`);
+  }
+  return [...new Set(issues)];
+}

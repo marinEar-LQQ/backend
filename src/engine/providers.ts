@@ -19,6 +19,11 @@ export interface AsrProvider {
 
 export interface TranslationProvider {
   readonly modelVersion: string;
+  /**
+   * placeholder(기본): [1] 자리표시를 넣은 문장을 번역하고 복원·검증한다.
+   * reference: 원문을 절 단위로 그대로 번역한다 — 결과는 "참고 번역". 작은 MT 모델은 자리표시를 버리므로 이 방식을 쓴다.
+   */
+  readonly mode?: 'placeholder' | 'reference';
   supports(target: LangCode): boolean;
   /** text 는 placeholder([1], [2] …)가 들어간 한국어 */
   translate(text: string, target: LangCode): Promise<string>;
