@@ -18,11 +18,11 @@ export interface UtteranceTiming {
 export interface PerfSummary {
   count: number;
   audioSeconds: number;
-  /** 처리 시작(enhancing) → 최종(rev2) */
+  /** 처리 시작(enhancing) → 최종 결과 */
   processingMs: { p50: number; p95: number; max: number };
-  /** 대기열 진입(발화 종료 직후) → 최종(rev2) */
+  /** 대기열 진입(발화 종료 직후) → 최종 결과 */
   endToFinalMs: { p50: number; p95: number; max: number };
-  /** 대기열 진입 → 첫 결과(rev1, enhanced 만) */
+  /** 대기열 진입 → 첫 결과 (결과를 한 번만 내므로 지금은 최종과 같다) */
   endToFirstMs: { p50: number; p95: number; max: number };
   rtf: { mean: number; max: number };
 }

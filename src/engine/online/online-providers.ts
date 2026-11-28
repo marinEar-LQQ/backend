@@ -35,8 +35,6 @@ async function post<T>(proxyUrl: string, path: string, body: unknown, timeoutMs:
 
 export class OnlineAsr implements AsrProvider {
   readonly sampleRate = 16000 as const;
-  /** 빠른 자막(lite) 먼저 → 정확한 모델(flash)로 확정. 실측: 22초 발화 lite ~2초 / flash 4~46초 */
-  readonly supportsFast = true;
   modelVersion = 'online-asr';
 
   constructor(

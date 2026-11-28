@@ -13,18 +13,13 @@ export interface AsrContext {
   vocabulary?: string[];
   /** 파일 분석이면 파일명 (시연 고정 데이터가 파일별 대본을 고를 때 사용) */
   sessionFile?: string;
-  /** fast = 먼저 보여 줄 빠른 자막(정확도 낮음), accurate(기본) = 확정용 */
+  /** 받아쓰기 모델 품질. 엔진은 accurate(기본)만 쓴다 — 중계 서버는 fast(lite)도 받지만 엔진은 부르지 않는다 */
   quality?: 'fast' | 'accurate';
 }
 
 export interface AsrProvider {
   readonly modelVersion: string;
   readonly sampleRate: 16000;
-  /**
-   * true 면 엔진이 "빠른 자막 먼저 → 정확한 결과로 확정" 순서로 부른다 (온라인 모드).
-   * rev1 = 완화음 fast, rev2 = 완화음·원음 accurate 를 동시에 (정확한 모델 호출 수는 그대로 2번)
-   */
-  readonly supportsFast?: boolean;
   transcribe(pcm16k: Float32Array, ctx: AsrContext): Promise<Transcript>;
 }
 

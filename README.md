@@ -79,17 +79,17 @@ await analyzeFile(engine, task.taskId, file);
 ```
 
 - 자원: whisper-small(약 250MB) + Opus-MT 3개(약 315MB). 첫 설치만 다운로드, 이후 캐시.
-- 실측(노트북 Chrome, WASM 멀티스레드): 발화당 처리 약 10초(RTF 2.4). 첫 결과(rev1)는 약 5초.
+- 실측(노트북 Chrome, WASM 멀티스레드): 발화당 처리 약 10초(RTF 2.4). (당시 측정은 결과를 두 번 내던 구조 기준)
 - 실시간 입력: 프론트 AudioWorklet → `openSession(taskId, 'live')` → `appendAudio` → `closeSession`. 장치 끊김은 `markDisconnected(sessionId)`.
 
 ## 이벤트 흐름 (발화 1건)
 
 ```
-analysis.progress(queued, utterance 포함) → enhancing → asr_enhanced
-→ transcript.partial(enhanced)                       // 잠정 자막. 검토·반영 금지
-→ analysis.final(revision 1, crossCheck=pending)     // 완화음만으로 잠정 판정
-→ asr_raw
-→ analysis.final(revision 2, crossCheck=complete)    // 원음 교차 검사 반영
+analysis.progress(queued, utterance 포함) → enhancing → asr_enhanced   // 완화음·원음 받아쓰기를 동시에 시작
+→ transcript.partial(enhanced)                       // 완화음 자막 (결과 전 표시용)
+→ asr_raw → comparing
+→ analysis.final(revision 1, crossCheck=complete)    // 원음 교차 검사까지 반영한 결과 1건
+                                                     // 원음 인식 실패 시 crossCheck=unavailable
 ```
 
 - `utteranceId + revision` 으로 갱신. 더 낮은 revision 이 늦게 와도 덮어쓰지 않는다.

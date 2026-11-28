@@ -17,14 +17,11 @@ async function setup() {
 }
 
 describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
-  it('합성 음성 6건 → 발화 6개, 각각 rev1(pending) → rev2(complete)', async () => {
+  it('대사마다 결과는 한 번만 (완화음·원음을 함께 받아쓴 뒤, crossCheck=complete)', async () => {
     const { finals } = await setup();
-    const rev1 = finals.filter((r) => r.revision === 1);
-    const rev2 = finals.filter((r) => r.revision === 2);
-    expect(rev1).toHaveLength(DEMO_SCENARIO.length);
-    expect(rev2).toHaveLength(DEMO_SCENARIO.length);
-    expect(rev1.every((r) => r.crossCheck === 'pending')).toBe(true);
-    expect(rev2.every((r) => r.crossCheck === 'complete' && r.origin === 'fixture')).toBe(true);
+    expect(finals).toHaveLength(DEMO_SCENARIO.length);
+    expect(new Set(finals.map((r) => r.utteranceId)).size).toBe(DEMO_SCENARIO.length);
+    expect(finals.every((r) => r.revision === 1 && r.crossCheck === 'complete' && r.origin === 'fixture')).toBe(true);
   });
 
   it('팀 대본 9개 대사의 최종 판정', async () => {
@@ -42,12 +39,10 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
     ]);
   });
 
-  it('원음 오인식(TNIC): rev1(완화음만)은 일치였다가 교차 검사 후 확인 필요로 바뀐다', async () => {
+  it('원음 오인식(TNIC): 완화음만 보면 일치지만, 원음과 함께 보면 처음부터 확인 필요', async () => {
     const { finals } = await setup();
-    const id = finals.filter((r) => r.revision === 1)[2]!.utteranceId;
-    const [r1, r2] = finals.filter((r) => r.utteranceId === id);
-    expect(r1!.comparison.kind).toBe('match');
-    expect(r1!.comparison.reasonCodes).toContain('CROSS_CHECK_PENDING');
+    const r2 = finals[2]!;
+    expect(r2.comparison.reasonCodes).not.toContain('CROSS_CHECK_PENDING');
     expect(r2!.comparison.kind).toBe('ambiguous');
     expect(r2!.comparison.reasonCodes).toContain('ASR_CONFUSABLE');
     expect(r2!.entities.terminalId).toBeNull();
@@ -76,7 +71,7 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
   it('apply: 확인 후 새 작업 버전, 반복 apply 는 중복 없음, 오래된 버전은 거절', async () => {
     const { client, taskId, latest, events } = await setup();
     const a = latest(0);
-    const cmd = { requestId: 'req-a', utteranceId: a.utteranceId, action: 'apply' as const, expectedResultRevision: 2, expectedTaskVersion: 1, confirmedByUser: true, patch: { terminalId: 'HPNT' } };
+    const cmd = { requestId: 'req-a', utteranceId: a.utteranceId, action: 'apply' as const, expectedResultRevision: 1, expectedTaskVersion: 1, confirmedByUser: true, patch: { terminalId: 'HPNT' } };
     await expect(client.reviewUtterance({ ...cmd, confirmedByUser: false, requestId: 'req-x' })).rejects.toMatchObject({ code: 'CONFIRMATION_REQUIRED' });
     const ev = await client.reviewUtterance(cmd);
     expect(ev.taskVersionAfter).toBe(2);
@@ -86,7 +81,7 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
 
     const b = latest(2);
     await expect(
-      client.reviewUtterance({ requestId: 'req-b', utteranceId: b.utteranceId, action: 'apply', expectedResultRevision: 2, expectedTaskVersion: 1, confirmedByUser: true, patch: { terminalId: 'PNIT' } }),
+      client.reviewUtterance({ requestId: 'req-b', utteranceId: b.utteranceId, action: 'apply', expectedResultRevision: 1, expectedTaskVersion: 1, confirmedByUser: true, patch: { terminalId: 'PNIT' } }),
     ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
 
     const log = await client.getTaskLog(taskId);
@@ -98,7 +93,7 @@ describe('EngineCore + Mock (시연 시나리오 전체 흐름)', () => {
   it('dismiss 는 기준을 바꾸지 않음', async () => {
     const { client, taskId, latest } = await setup();
     const d = latest(3);
-    await client.reviewUtterance({ requestId: 'req-d', utteranceId: d.utteranceId, action: 'dismiss', expectedResultRevision: 2, expectedTaskVersion: 1, confirmedByUser: true });
+    await client.reviewUtterance({ requestId: 'req-d', utteranceId: d.utteranceId, action: 'dismiss', expectedResultRevision: 1, expectedTaskVersion: 1, confirmedByUser: true });
     const log = await client.getTaskLog(taskId);
     expect(log.task.activeVersion).toBe(1);
     expect(log.counts.dismissed).toBe(1);
